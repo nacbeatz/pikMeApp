@@ -12,6 +12,15 @@
 
 export const MAPBOX_ACCESS_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 
+// Log token status in development (remove sensitive data in production)
+if (__DEV__) {
+  if (MAPBOX_ACCESS_TOKEN) {
+    console.log('Mapbox access token loaded successfully');
+  } else {
+    console.warn('⚠️ Mapbox access token not set. Please set EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN in .env');
+  }
+}
+
 // Mapbox style URLs
 export const MAPBOX_STYLES = {
   street: 'mapbox://styles/mapbox/streets-v12',
@@ -25,7 +34,7 @@ export const MAPBOX_STYLES = {
 export const DEFAULT_MAP_SETTINGS = {
   styleURL: MAPBOX_STYLES.dark,
   zoomLevel: 13,
-  centerCoordinate: [0, 0], // Fallback only - will use user's actual location
+  centerCoordinate: [50.62999315121865, 4.8636523453947555], // Fallback only - will use user's actual location
 };
 
 

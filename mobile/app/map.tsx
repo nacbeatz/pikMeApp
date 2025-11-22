@@ -3,18 +3,28 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
 import Mapbox, { 
   MapView, 
-  Camera, 
-  ShapeSource, 
-  SymbolLayer,
+  Camera,
+  ShapeSource,
+  CircleLayer,
 } from '@rnmapbox/maps';
-// @ts-ignore - @turf/helpers types issue
-import { featureCollection, point } from '@turf/helpers';
-import usersData from '@/assets/data/users.json';
 import { useEffect, useState } from 'react';
 import * as Location from 'expo-location';
-import { DEFAULT_MAP_SETTINGS, MAPBOX_ACCESS_TOKEN as MAPBOX_ACCESS_TOKEN_CONSTANT } from '@/constants/mapbox';
+import { DEFAULT_MAP_SETTINGS, MAPBOX_ACCESS_TOKEN } from '@/constants/mapbox';
 
-Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN_CONSTANT);
+// Initialize Mapbox access token
+if (MAPBOX_ACCESS_TOKEN && MAPBOX_ACCESS_TOKEN !== '') {
+  Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
+} else {
+  console.error('⚠️ Mapbox access token not set. Map may not work correctly.');
+}
+
+// Check if components are available
+console.log('🔵 Mapbox components check:', {
+  MapView: !!MapView,
+  Camera: !!Camera,
+  ShapeSource: !!ShapeSource,
+  CircleLayer: !!CircleLayer,
+});
 
 export default function MapScreen() {
   const colors = Colors.light;
@@ -75,72 +85,110 @@ export default function MapScreen() {
     })();
   }, []);
 
-  // Use user's location if available
+  // Use user's location - wait for it before showing map
   const userCoordinates = initialLocation 
     ? [initialLocation.coords.longitude, initialLocation.coords.latitude]
     : null;
 
-  // Create point features from users data
-  const users = usersData as { id: number; name: string; lat: number; long: number }[];
-  
-  // Debug: Log first user to verify data
-  if (users.length > 0) {
-    console.log('First user data:', users[0]);
+  console.log('UserCoordinates:', userCoordinates);
+
+  // Wait for user location before showing map
+  if (!userCoordinates) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.mapContainer} />
+      </View>
+    );
   }
+
+  // Load users data
+  const usersData = require('@/assets/data/users.json');
+  const users = usersData as { id: number; name: string; lat: number; long: number; image?: string }[];
   
-  const userPoints = featureCollection(
-    users.map(user =>
-      point([user.long, user.lat], {
+  // Create GeoJSON for user locations
+  const userLocations = {
+    type: 'FeatureCollection' as const,
+    features: users.map((user) => ({
+      type: 'Feature' as const,
+      id: user.id,
+      geometry: {
+        type: 'Point' as const,
+        coordinates: [user.long, user.lat] as [number, number],
+      },
+      properties: {
         id: user.id,
         name: user.name,
-      })
-    )
-  );
+        image: user.image,
+      },
+    })),
+  };
 
-  console.log(`Loaded ${users.length} users for map markers`);
-  console.log('UserPoints GeoJSON:', JSON.stringify(userPoints, null, 2));
+  console.log('User locations GeoJSON:', userLocations);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <MapView 
-        style={styles.mapContainer} 
+        style={[styles.mapContainer, { width: '100%', height: '100%' }]} 
         styleURL={DEFAULT_MAP_SETTINGS.styleURL}
         zoomEnabled={true}
         scrollEnabled={true}
         pitchEnabled={true}
         rotateEnabled={true}>
-        {locationGranted && locationEnabled && userCoordinates ? (
-          <>
-            <Camera 
-              defaultSettings={{
-                centerCoordinate: userCoordinates,
-                zoomLevel: DEFAULT_MAP_SETTINGS.zoomLevel,
-              }}
-              followUserLocation={true}
-              followZoomLevel={DEFAULT_MAP_SETTINGS.zoomLevel}
-              animationDuration={1000}
-            />
-          </>
-        ) : (
-          <Camera
-            defaultSettings={{
-              centerCoordinate: users.length > 0 
-                ? [users[0].long, users[0].lat] 
-                : (userCoordinates || DEFAULT_MAP_SETTINGS.centerCoordinate),
-              zoomLevel: users.length > 0 ? 12 : DEFAULT_MAP_SETTINGS.zoomLevel,
-            }}
-          />
-        )}
-        {users.length > 0 && (
-          <ShapeSource id="users" shape={userPoints}>
-            <SymbolLayer
-              id="user-symbols"
+        <Camera
+          defaultSettings={{
+            centerCoordinate: userCoordinates,
+            zoomLevel: DEFAULT_MAP_SETTINGS.zoomLevel,
+          }}
+          followUserLocation={locationGranted && locationEnabled}
+          followZoomLevel={DEFAULT_MAP_SETTINGS.zoomLevel}
+          animationDuration={1000}
+        />
+        
+        {/* User's current location - shown as a green circle */}
+        {userCoordinates && ShapeSource && CircleLayer && locationGranted && locationEnabled && (
+          <ShapeSource 
+            id="current-user-location" 
+            shape={{
+              type: 'FeatureCollection' as const,
+              features: [{
+                type: 'Feature' as const,
+                id: 'current-user',
+                geometry: {
+                  type: 'Point' as const,
+                  coordinates: userCoordinates as [number, number],
+                },
+                properties: {
+                  id: 'current-user',
+                  name: 'You',
+                },
+              }],
+            } as any}>
+            <CircleLayer
+              id="current-user-circle"
               style={{
-                iconImage: 'pin',
-                iconSize: 2.0,
-                iconAllowOverlap: true,
-                iconIgnorePlacement: true,
-                iconAnchor: 'bottom',
+                circleRadius: 12,
+                circleColor: '#00FF00',
+                circleStrokeWidth: 3,
+                circleStrokeColor: '#FFFFFF',
+                circleOpacity: 0.9,
+              }}
+            />
+          </ShapeSource>
+        )}
+        
+        {/* Display user markers as circles - conditionally render if available */}
+        {ShapeSource && CircleLayer && (
+          <ShapeSource 
+            id="user-locations" 
+            shape={userLocations}>
+            <CircleLayer
+              id="user-circles"
+              style={{
+                circleRadius: 10,
+                circleColor: '#5213FE',
+                circleStrokeWidth: 3,
+                circleStrokeColor: '#FFFFFF',
+                circleOpacity: 0.9,
               }}
             />
           </ShapeSource>
@@ -216,4 +264,3 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 });
-

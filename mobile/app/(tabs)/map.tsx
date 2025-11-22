@@ -77,19 +77,19 @@ export default function MapScreen() {
     })();
   }, []);
 
-  // Wait for location before showing map centered on user
-  if (isLoadingLocation) {
+  // Use user's location - always use user coordinates, no fallback
+  const userCoordinates = initialLocation 
+    ? [initialLocation.coords.longitude, initialLocation.coords.latitude]
+    : null;
+
+  // Wait for location before showing map - always use user's location
+  if (isLoadingLocation || !userCoordinates) {
     return (
       <View style={styles.container}>
         <View style={styles.map} />
       </View>
     );
   }
-
-  // Use user's location if available, otherwise show error
-  const userCoordinates = initialLocation 
-    ? [initialLocation.coords.longitude, initialLocation.coords.latitude]
-    : null;
 
   return (
     <View style={styles.container}>
@@ -101,31 +101,15 @@ export default function MapScreen() {
         pitchEnabled={true}
         rotateEnabled={true}
         userLocationEnabled={locationGranted && locationEnabled}>
-        {locationGranted && locationEnabled && userCoordinates ? (
-          <Camera 
-            defaultSettings={{
-              centerCoordinate: userCoordinates,
-              zoomLevel: 15,
-            }}
-            followUserLocation={true}
-            followZoomLevel={15}
-            animationDuration={1000}
-          />
-        ) : userCoordinates ? (
-          <Camera
-            defaultSettings={{
-              centerCoordinate: userCoordinates,
-              zoomLevel: 15,
-            }}
-          />
-        ) : (
-          <Camera
-            defaultSettings={{
-              centerCoordinate: DEFAULT_MAP_SETTINGS.centerCoordinate,
-              zoomLevel: DEFAULT_MAP_SETTINGS.zoomLevel,
-            }}
-          />
-        )}
+        <Camera 
+          defaultSettings={{
+            centerCoordinate: userCoordinates,
+            zoomLevel: 15,
+          }}
+          followUserLocation={locationGranted && locationEnabled}
+          followZoomLevel={15}
+          animationDuration={1000}
+        />
       </MapView>
     </View>
   );
