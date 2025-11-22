@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE } from '@/constants/api';
 
 interface User {
-  id: string;
+  userId: number;
   email: string;
   name: string;
+  token: string;
 }
 
 interface AuthContextType {
@@ -30,8 +32,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadUser = async () => {
     try {
       const userData = await AsyncStorage.getItem('user');
-      if (userData) {
-        setUser(JSON.parse(userData));
+      const token = await AsyncStorage.getItem('token');
+      if (userData && token) {
+        const user = JSON.parse(userData);
+        setUser({ ...user, token });
       }
     } catch (error) {
       console.error('Error loading user:', error);
@@ -42,17 +46,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      // TODO: Replace with actual API call
-      // For now, simulate login
-      const mockUser: User = {
-        id: '1',
-        email: email,
-        name: 'User',
-      };
+      if (!API_BASE) {
+        console.error('API_BASE is not configured');
+        return false;
+      }
+
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Login failed:', errorData);
+        return false;
+      }
+
+      const data = await response.json();
       
-      await AsyncStorage.setItem('user', JSON.stringify(mockUser));
-      setUser(mockUser);
-      return true;
+      if (data.token && data.userId) {
+        const user: User = {
+          userId: data.userId,
+          email: data.email,
+          name: data.name,
+          token: data.token,
+        };
+        
+        await AsyncStorage.setItem('user', JSON.stringify(user));
+        await AsyncStorage.setItem('token', data.token);
+        setUser(user);
+        return true;
+      }
+      
+      return false;
     } catch (error) {
       console.error('Login error:', error);
       return false;
@@ -61,17 +90,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (email: string, password: string, name: string): Promise<boolean> => {
     try {
-      // TODO: Replace with actual API call
-      // For now, simulate registration
-      const mockUser: User = {
-        id: '1',
-        email: email,
-        name: name,
-      };
+      if (!API_BASE) {
+        console.error('API_BASE is not configured');
+        return false;
+      }
+
+      const response = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password, name }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Registration failed:', errorData);
+        return false;
+      }
+
+      const data = await response.json();
       
-      await AsyncStorage.setItem('user', JSON.stringify(mockUser));
-      setUser(mockUser);
-      return true;
+      if (data.token && data.userId) {
+        const user: User = {
+          userId: data.userId,
+          email: data.email,
+          name: data.name,
+          token: data.token,
+        };
+        
+        await AsyncStorage.setItem('user', JSON.stringify(user));
+        await AsyncStorage.setItem('token', data.token);
+        setUser(user);
+        return true;
+      }
+      
+      return false;
     } catch (error) {
       console.error('Registration error:', error);
       return false;
@@ -81,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       await AsyncStorage.removeItem('user');
+      await AsyncStorage.removeItem('token');
       setUser(null);
     } catch (error) {
       console.error('Logout error:', error);
