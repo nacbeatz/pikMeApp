@@ -42,7 +42,7 @@ public class PickRequest {
     private Integer durationMinutes;
 
     // PostGIS Point for geospatial queries
-    @Column(columnDefinition = "geometry(Point,4326)")
+    @Column(columnDefinition = "geography(Point,4326)")
     private Point location;
 
     // Separate lat/long for easier JSON serialization
