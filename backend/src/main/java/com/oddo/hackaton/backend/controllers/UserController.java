@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/users")
@@ -38,14 +39,14 @@ public class UserController {
      * GET /api/users/profile
      * Headers: Authorization: Bearer {jwt_token}
      */
-    @GetMapping("")
+    @GetMapping()
     public ResponseEntity<List<User>> getAllUsers() {
         return ResponseEntity.ok(service.getAllUsers());
     }
 
     @GetMapping("{id}")
-    public ResponseEntity<User> getUser(@RequestBody Long id) {
-        User user = service.getUser(id);
-        return user == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(user);
+    public ResponseEntity<?> getUser(@RequestBody Long id) {
+        Optional<User> user = service.getUser(id);
+        return user.isPresent() ? ResponseEntity.ok(user) : ResponseEntity.notFound().build();
     }
 }
