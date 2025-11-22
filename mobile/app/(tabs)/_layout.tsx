@@ -72,7 +72,7 @@ export default function TabLayout() {
   const activeIndex = React.useMemo(() => {
     if (pathname.includes('/home')) return 0;
     if (pathname.includes('/map')) return 1;
-    if (pathname.includes('/settings')) return 2;
+    if (pathname.includes('/profile')) return 2;
     return 0;
   }, [pathname]);
 
@@ -127,14 +127,14 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="settings"
+          name="profile"
           options={{
-            title: 'Settings',
+            title: 'profile',
             tabBarLabel: ({ focused }) => (
-              <TabLabel focused={focused} label="Settings" />
+              <TabLabel focused={focused} label="profile" />
             ),
             tabBarIcon: ({ focused }) => (
-              <TabIcon name="settings" focused={focused} />
+              <TabIcon name="account-circle" focused={focused} />
             ),
           }}
         />
