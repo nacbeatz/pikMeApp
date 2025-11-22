@@ -1,5 +1,5 @@
 import { StyleSheet, View, Alert } from 'react-native';
-import Mapbox, { MapView, Camera, LocationPuck } from '@rnmapbox/maps';
+import Mapbox, { MapView, Camera } from '@rnmapbox/maps';
 import { useEffect, useState } from 'react';
 import * as Location from 'expo-location';
 import { MAPBOX_ACCESS_TOKEN, DEFAULT_MAP_SETTINGS } from '@/constants/mapbox';
@@ -102,22 +102,15 @@ export default function MapScreen() {
         rotateEnabled={true}
         userLocationEnabled={locationGranted && locationEnabled}>
         {locationGranted && locationEnabled && userCoordinates ? (
-          <>
-            <Camera 
-              defaultSettings={{
-                centerCoordinate: userCoordinates,
-                zoomLevel: 15,
-              }}
-              followUserLocation={true} 
-              followUserLocationPriority="high"
-              followZoomLevel={15}
-              animationDuration={1000}
-            />
-            <LocationPuck 
-              puckBearingEnabled={true}
-              puckBearing="heading"
-            />
-          </>
+          <Camera 
+            defaultSettings={{
+              centerCoordinate: userCoordinates,
+              zoomLevel: 15,
+            }}
+            followUserLocation={true}
+            followZoomLevel={15}
+            animationDuration={1000}
+          />
         ) : userCoordinates ? (
           <Camera
             defaultSettings={{

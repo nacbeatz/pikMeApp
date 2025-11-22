@@ -1,8 +1,10 @@
 import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { isAuthenticated } = useAuth();
 
   const handlePickPress = () => {
     // Navigate to map tab
@@ -10,8 +12,14 @@ export default function HomeScreen() {
   };
 
   const handlePickMePress = () => {
-    // Placeholder for the PICK ME button
-    alert('PICK ME button pressed');
+    // Check if user is logged in
+    if (!isAuthenticated) {
+      // Navigate to auth screen
+      router.push('/auth');
+    } else {
+      // Navigate to add activity screen
+      router.push('/add-activity');
+    }
   };
 
   return (

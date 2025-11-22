@@ -1,7 +1,15 @@
 import { StyleSheet, View, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
-import Mapbox, { MapView, Camera, LocationPuck } from '@rnmapbox/maps';
+import Mapbox, { 
+  MapView, 
+  Camera, 
+  ShapeSource, 
+  SymbolLayer,
+} from '@rnmapbox/maps';
+// @ts-ignore - @turf/helpers types issue
+import { featureCollection, point } from '@turf/helpers';
+import usersData from '@/assets/data/users.json';
 import { useEffect, useState } from 'react';
 import * as Location from 'expo-location';
 import { DEFAULT_MAP_SETTINGS, MAPBOX_ACCESS_TOKEN as MAPBOX_ACCESS_TOKEN_CONSTANT } from '@/constants/mapbox';
@@ -72,6 +80,26 @@ export default function MapScreen() {
     ? [initialLocation.coords.longitude, initialLocation.coords.latitude]
     : null;
 
+  // Create point features from users data
+  const users = usersData as { id: number; name: string; lat: number; long: number }[];
+  
+  // Debug: Log first user to verify data
+  if (users.length > 0) {
+    console.log('First user data:', users[0]);
+  }
+  
+  const userPoints = featureCollection(
+    users.map(user =>
+      point([user.long, user.lat], {
+        id: user.id,
+        name: user.name,
+      })
+    )
+  );
+
+  console.log(`Loaded ${users.length} users for map markers`);
+  console.log('UserPoints GeoJSON:', JSON.stringify(userPoints, null, 2));
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <MapView 
@@ -92,18 +120,30 @@ export default function MapScreen() {
               followZoomLevel={DEFAULT_MAP_SETTINGS.zoomLevel}
               animationDuration={1000}
             />
-            <LocationPuck 
-              puckBearingEnabled={true}
-              puckBearing="heading"
-            />
           </>
         ) : (
           <Camera
             defaultSettings={{
-              centerCoordinate: userCoordinates || DEFAULT_MAP_SETTINGS.centerCoordinate,
-              zoomLevel: DEFAULT_MAP_SETTINGS.zoomLevel,
+              centerCoordinate: users.length > 0 
+                ? [users[0].long, users[0].lat] 
+                : (userCoordinates || DEFAULT_MAP_SETTINGS.centerCoordinate),
+              zoomLevel: users.length > 0 ? 12 : DEFAULT_MAP_SETTINGS.zoomLevel,
             }}
           />
+        )}
+        {users.length > 0 && (
+          <ShapeSource id="users" shape={userPoints}>
+            <SymbolLayer
+              id="user-symbols"
+              style={{
+                iconImage: 'pin',
+                iconSize: 2.0,
+                iconAllowOverlap: true,
+                iconIgnorePlacement: true,
+                iconAnchor: 'bottom',
+              }}
+            />
+          </ShapeSource>
         )}
       </MapView>
       <SafeAreaView edges={['bottom']} style={styles.tabBarContainer}>
