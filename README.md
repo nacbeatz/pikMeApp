@@ -1,4 +1,4 @@
-This app is for users who feel lonely that want face to face interaction bit don’t want to approach people in real life 
+This app is for users who feel lonely that want face to face interaction bit don’t want to approach people in real life
 
 App Flow:
 user register / logs in
