@@ -1,8 +1,8 @@
-// Web-specific version of (tabs)/map.tsx - doesn't import react-native-maps
-import { StyleSheet, View, Alert, Platform } from 'react-native';
+// Web-specific version of (tabs)/map.tsx - doesn't import Mapbox
+import { StyleSheet, View, Alert, Platform, Text } from 'react-native';
 import { useEffect, useState } from 'react';
 import * as Location from 'expo-location';
-import { DEFAULT_MAP_SETTINGS } from '@/constants/maps';
+import { DEFAULT_MAP_SETTINGS } from '@/constants/mapbox';
 
 export default function MapScreen() {
   const [locationGranted, setLocationGranted] = useState(false);
@@ -76,19 +76,18 @@ export default function MapScreen() {
     })();
   }, []);
 
-  // Use user's location coordinates
+  // Use user's location coordinates (Mapbox format: [longitude, latitude])
   const userCoordinates = initialLocation 
-    ? {
-        latitude: initialLocation.coords.latitude,
-        longitude: initialLocation.coords.longitude,
-      }
+    ? [initialLocation.coords.longitude, initialLocation.coords.latitude] as [number, number]
     : null;
 
-  // Wait for location before showing map - always use user's location
+  // Wait for location before showing map
   if (isLoadingLocation) {
     return (
       <View style={styles.container}>
-        <View style={styles.map} />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading map...</Text>
+        </View>
       </View>
     );
   }
@@ -98,12 +97,12 @@ export default function MapScreen() {
     <View style={styles.container}>
       <View style={[styles.map, styles.webFallback]}>
         <View style={styles.webFallbackContent}>
-          <View style={styles.webFallbackText}>
+          <Text style={styles.webFallbackText}>
             Maps are only available on iOS and Android devices.
-          </View>
-          <View style={styles.webFallbackText}>
-            Current Location: {userCoordinates ? `${region.latitude.toFixed(4)}, ${region.longitude.toFixed(4)}` : 'Loading...'}
-          </View>
+          </Text>
+          <Text style={styles.webFallbackText}>
+            Current Location: {userCoordinates ? `${userCoordinates[1].toFixed(4)}, ${userCoordinates[0].toFixed(4)}` : 'Loading...'}
+          </Text>
         </View>
       </View>
     </View>
@@ -117,6 +116,16 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1F1C39',
+  },
+  loadingText: {
+    color: '#ffffff',
+    fontSize: 16,
   },
   webFallback: {
     justifyContent: 'center',

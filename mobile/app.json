@@ -14,10 +14,7 @@
         "NSLocationWhenInUseUsageDescription": "This app uses location to show you on the map.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses location to show you on the map."
       },
-      "bundleIdentifier": "com.croxstudios.mobile",
-      "config": {
-        "googleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
-      }
+      "bundleIdentifier": "com.croxstudios.mobile"
     },
     "android": {
       "adaptiveIcon": {
@@ -32,12 +29,7 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
       ],
-      "package": "com.croxstudios.mobile",
-      "config": {
-        "googleMaps": {
-          "apiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
-        }
-      }
+      "package": "com.croxstudios.mobile"
     },
     "web": {
       "output": "static",
@@ -62,6 +54,12 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location.",
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
+        }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsDownloadToken": "${EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN}"
         }
       ]
     ],
