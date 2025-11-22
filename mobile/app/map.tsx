@@ -1,36 +1,54 @@
 import { StyleSheet, View, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
-import Mapbox, { 
-  MapView, 
-  Camera,
-  ShapeSource,
-  CircleLayer,
-} from '@rnmapbox/maps';
 import { useEffect, useState } from 'react';
 import * as Location from 'expo-location';
-import { DEFAULT_MAP_SETTINGS, MAPBOX_ACCESS_TOKEN } from '@/constants/mapbox';
+import { DEFAULT_MAP_SETTINGS } from '@/constants/maps';
 
-// Initialize Mapbox access token
-if (MAPBOX_ACCESS_TOKEN && MAPBOX_ACCESS_TOKEN !== '') {
-  Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
-} else {
-  console.error('⚠️ Mapbox access token not set. Map may not work correctly.');
-}
+// Platform-specific imports - only load react-native-maps on native platforms
+// Metro/Webpack resolver will alias react-native-maps to @teovilla/react-native-web-maps on web
+let MapView: any;
+let Marker: any;
+let Circle: any;
+let PROVIDER_GOOGLE: any;
 
-// Check if components are available
-console.log('🔵 Mapbox components check:', {
-  MapView: !!MapView,
-  Camera: !!Camera,
-  ShapeSource: !!ShapeSource,
-  CircleLayer: !!CircleLayer,
-});
+// Load maps module - only called on native platforms in useEffect
+// This prevents web bundler from statically analyzing react-native-maps at module load time
 
 export default function MapScreen() {
   const colors = Colors.light;
   const [locationGranted, setLocationGranted] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [initialLocation, setInitialLocation] = useState<Location.LocationObject | null>(null);
+  const [region, setRegion] = useState(DEFAULT_MAP_SETTINGS.initialRegion);
+  const [mapsLoaded, setMapsLoaded] = useState(false);
+
+  // Load react-native-maps only on native platforms
+  // Note: This file should not be loaded on web - Expo uses map.web.tsx for web builds
+  // If this runs on web, something is wrong with file resolution
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      console.error('ERROR: map.tsx is being loaded on web! Should use map.web.tsx instead.');
+      setMapsLoaded(true); // Prevent errors
+      return;
+    }
+
+    if (!mapsLoaded) {
+      try {
+        // Dynamic require inside useEffect - only executes on native platforms
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const MapsModule = require('react-native-maps');
+        MapView = MapsModule.default;
+        Marker = MapsModule.Marker;
+        Circle = MapsModule.Circle;
+        PROVIDER_GOOGLE = MapsModule.PROVIDER_GOOGLE;
+        setMapsLoaded(true);
+      } catch (error) {
+        console.warn('Failed to load react-native-maps:', error);
+        setMapsLoaded(true); // Set to true to prevent infinite loading
+      }
+    }
+  }, [mapsLoaded]);
 
   useEffect(() => {
     // Request location permissions and get initial location
@@ -74,6 +92,14 @@ export default function MapScreen() {
         });
         
         setInitialLocation(location);
+        
+        // Update map region to user's location
+        setRegion({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: DEFAULT_MAP_SETTINGS.initialRegion.latitudeDelta,
+          longitudeDelta: DEFAULT_MAP_SETTINGS.initialRegion.longitudeDelta,
+        });
       } catch (error) {
         console.error('Error getting location:', error);
         Alert.alert(
@@ -87,7 +113,10 @@ export default function MapScreen() {
 
   // Use user's location - wait for it before showing map
   const userCoordinates = initialLocation 
-    ? [initialLocation.coords.longitude, initialLocation.coords.latitude]
+    ? {
+        latitude: initialLocation.coords.latitude,
+        longitude: initialLocation.coords.longitude,
+      }
     : null;
 
   console.log('UserCoordinates:', userCoordinates);
@@ -101,98 +130,107 @@ export default function MapScreen() {
     );
   }
 
+  // Web fallback - show message that maps are not fully supported on web
+  if (Platform.OS === 'web') {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.mapContainer, styles.webFallback]}>
+          <View style={styles.webFallbackContent}>
+            <View style={styles.webFallbackText}>
+              Maps are only available on iOS and Android devices.
+            </View>
+            <View style={styles.webFallbackText}>
+              Current Location: {region.latitude.toFixed(4)}, {region.longitude.toFixed(4)}
+            </View>
+          </View>
+        </View>
+        <SafeAreaView edges={['bottom']} style={styles.tabBarContainer}>
+          {/* Tab bar content can go here */}
+        </SafeAreaView>
+      </View>
+    );
+  }
+
+  // Ensure MapView is available before rendering (native platforms only)
+  if (!mapsLoaded || !MapView) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.mapContainer, styles.webFallback]}>
+          <View style={styles.webFallbackContent}>
+            <View style={styles.webFallbackText}>
+              Maps not available. Please ensure react-native-maps is properly installed.
+            </View>
+            <View style={styles.webFallbackText}>
+              Current Location: {region.latitude.toFixed(4)}, {region.longitude.toFixed(4)}
+            </View>
+          </View>
+        </View>
+        <SafeAreaView edges={['bottom']} style={styles.tabBarContainer}>
+          {/* Tab bar content can go here */}
+        </SafeAreaView>
+      </View>
+    );
+  }
+
   // Load users data
   const usersData = require('@/assets/data/users.json');
   const users = usersData as { id: number; name: string; lat: number; long: number; image?: string }[];
-  
-  // Create GeoJSON for user locations
-  const userLocations = {
-    type: 'FeatureCollection' as const,
-    features: users.map((user) => ({
-      type: 'Feature' as const,
-      id: user.id,
-      geometry: {
-        type: 'Point' as const,
-        coordinates: [user.long, user.lat] as [number, number],
-      },
-      properties: {
-        id: user.id,
-        name: user.name,
-        image: user.image,
-      },
-    })),
-  };
-
-  console.log('User locations GeoJSON:', userLocations);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <MapView 
-        style={[styles.mapContainer, { width: '100%', height: '100%' }]} 
-        styleURL={DEFAULT_MAP_SETTINGS.styleURL}
+        provider={PROVIDER_GOOGLE}
+        style={styles.mapContainer}
+        initialRegion={region}
+        region={region}
+        showsUserLocation={locationGranted && locationEnabled}
+        showsMyLocationButton={true}
+        showsCompass={true}
         zoomEnabled={true}
         scrollEnabled={true}
         pitchEnabled={true}
-        rotateEnabled={true}>
-        <Camera
-          defaultSettings={{
-            centerCoordinate: userCoordinates,
-            zoomLevel: DEFAULT_MAP_SETTINGS.zoomLevel,
-          }}
-          followUserLocation={locationGranted && locationEnabled}
-          followZoomLevel={DEFAULT_MAP_SETTINGS.zoomLevel}
-          animationDuration={1000}
-        />
-        
+        rotateEnabled={true}
+        mapType="standard"
+        customMapStyle={[
+          {
+            featureType: 'all',
+            elementType: 'geometry',
+            stylers: [{ color: '#1F1C39' }],
+          },
+          {
+            featureType: 'all',
+            elementType: 'labels.text.fill',
+            stylers: [{ color: '#ffffff' }],
+          },
+          {
+            featureType: 'all',
+            elementType: 'labels.text.stroke',
+            stylers: [{ color: '#000000' }],
+          },
+        ]}>
         {/* User's current location - shown as a green circle */}
-        {userCoordinates && ShapeSource && CircleLayer && locationGranted && locationEnabled && (
-          <ShapeSource 
-            id="current-user-location" 
-            shape={{
-              type: 'FeatureCollection' as const,
-              features: [{
-                type: 'Feature' as const,
-                id: 'current-user',
-                geometry: {
-                  type: 'Point' as const,
-                  coordinates: userCoordinates as [number, number],
-                },
-                properties: {
-                  id: 'current-user',
-                  name: 'You',
-                },
-              }],
-            } as any}>
-            <CircleLayer
-              id="current-user-circle"
-              style={{
-                circleRadius: 12,
-                circleColor: '#00FF00',
-                circleStrokeWidth: 3,
-                circleStrokeColor: '#FFFFFF',
-                circleOpacity: 0.9,
-              }}
-            />
-          </ShapeSource>
+        {userCoordinates && locationGranted && locationEnabled && (
+          <Circle
+            center={userCoordinates}
+            radius={100}
+            strokeWidth={3}
+            strokeColor="#FFFFFF"
+            fillColor="rgba(0, 255, 0, 0.3)"
+          />
         )}
         
-        {/* Display user markers as circles - conditionally render if available */}
-        {ShapeSource && CircleLayer && (
-          <ShapeSource 
-            id="user-locations" 
-            shape={userLocations}>
-            <CircleLayer
-              id="user-circles"
-              style={{
-                circleRadius: 10,
-                circleColor: '#5213FE',
-                circleStrokeWidth: 3,
-                circleStrokeColor: '#FFFFFF',
-                circleOpacity: 0.9,
-              }}
-            />
-          </ShapeSource>
-        )}
+        {/* Display user markers */}
+        {users.map((user) => (
+          <Marker
+            key={user.id}
+            coordinate={{
+              latitude: user.lat,
+              longitude: user.long,
+            }}
+            title={user.name}
+            pinColor="#5213FE"
+          />
+        ))}
       </MapView>
       <SafeAreaView edges={['bottom']} style={styles.tabBarContainer}>
         {/* Tab bar content can go here */}
@@ -205,20 +243,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    backgroundColor: 'red',
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    lineHeight: 32,
-    color: '#11181C',
-  },
   mapContainer: {
     flex: 1,
+    width: '100%',
+    height: '100%',
   },
   tabBarContainer: {
     position: 'absolute',
@@ -262,5 +290,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     letterSpacing: 1,
+  },
+  webFallback: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  webFallbackContent: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  webFallbackText: {
+    color: '#ffffff',
+    fontSize: 16,
+    marginVertical: 10,
+    textAlign: 'center',
   },
 });
