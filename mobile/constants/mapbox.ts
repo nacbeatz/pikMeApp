@@ -10,7 +10,7 @@
  * For production, use environment variables to store the token securely.
  */
 
-export const MAPBOX_ACCESS_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoiY3JveHN0dWRpb3MiLCJhIjoiY21pOXdneHE0MG1pcjJqcjJlcGFneXphayJ9.CTxVwXB78uY6IDtfEYhlgw';
+export const MAPBOX_ACCESS_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 
 // Mapbox style URLs
 export const MAPBOX_STYLES = {
@@ -21,10 +21,11 @@ export const MAPBOX_STYLES = {
 };
 
 // Default map settings
+// Note: centerCoordinate is only used as fallback if user location cannot be determined
 export const DEFAULT_MAP_SETTINGS = {
   styleURL: MAPBOX_STYLES.dark,
   zoomLevel: 13,
-  centerCoordinate: [-122.4194, 37.7749], // Default to San Francisco
+  centerCoordinate: [0, 0], // Fallback only - will use user's actual location
 };
 
 
