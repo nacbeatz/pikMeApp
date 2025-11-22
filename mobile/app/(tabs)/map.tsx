@@ -1,21 +1,16 @@
-import { StyleSheet, View, Alert, Platform, Text, Modal, TouchableOpacity, Image } from 'react-native';
-import { useEffect, useState } from 'react';
+import { StyleSheet, View, Alert, Text, Modal, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
+import { useEffect, useState, useMemo } from 'react';
 import * as Location from 'expo-location';
+import { GOOGLE_MAPS_API_KEY } from '@/constants/maps';
+import { getNearbyPickRequests, sendPickRequest, type PickRequest } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 
-// Conditionally import react-native-maps only on native platforms
-let MapView: any;
-let Marker: any;
-let PROVIDER_DEFAULT: any;
-
-if (Platform.OS !== 'web') {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const MapsModule = require('react-native-maps');
-  MapView = MapsModule.default;
-  Marker = MapsModule.Marker;
-  PROVIDER_DEFAULT = MapsModule.PROVIDER_DEFAULT;
-  // Note: Circle component requires native rebuild - removed for now to avoid errors
-  // To use Circle, run: npx expo prebuild --clean && npx expo run:ios
-}
+// Import react-native-maps - Metro will alias to @teovilla/react-native-web-maps on web
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const MapsModule = require('react-native-maps');
+const MapView = MapsModule.default;
+const Marker = MapsModule.Marker;
+const PROVIDER_DEFAULT = MapsModule.PROVIDER_DEFAULT;
 
 // Default map settings
 const DEFAULT_REGION = {
@@ -25,23 +20,29 @@ const DEFAULT_REGION = {
   longitudeDelta: 0.0421,
 };
 
-type User = {
-  id: number;
-  name: string;
-  lat: number;
-  long: number;
-  image?: string;
-  activity?: string;
-};
-
 export default function MapScreen() {
+  const { isAuthenticated } = useAuth();
   const [locationGranted, setLocationGranted] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [initialLocation, setInitialLocation] = useState<Location.LocationObject | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
   const [region, setRegion] = useState(DEFAULT_REGION);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedPickRequest, setSelectedPickRequest] = useState<PickRequest | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [pickRequests, setPickRequests] = useState<PickRequest[]>([]);
+  const [isLoadingPickRequests, setIsLoadingPickRequests] = useState(false);
+  const [isSendingPick, setIsSendingPick] = useState(false);
+
+  // Load dummy users data as fallback
+  const dummyUsersData = require('@/assets/data/users.json');
+  type DummyUser = {
+    id: number;
+    name: string;
+    lat: number;
+    long: number;
+    image?: string;
+  };
+  const dummyUsers = dummyUsersData as DummyUser[];
 
   useEffect(() => {
     // Request location permissions and get initial location
@@ -108,48 +109,106 @@ export default function MapScreen() {
     })();
   }, []);
 
-  // Use user's current location coordinates
-  const userCoordinates = initialLocation 
-    ? {
-        latitude: initialLocation.coords.latitude,
-        longitude: initialLocation.coords.longitude,
-      }
-    : null;
+  // Use user's current location coordinates (memoized to avoid useEffect dependency issues)
+  const userCoordinates = useMemo(() => {
+    return initialLocation
+      ? {
+          latitude: initialLocation.coords.latitude,
+          longitude: initialLocation.coords.longitude,
+        }
+      : null;
+  }, [initialLocation]);
 
-  // Load users data
-  const usersData = require('@/assets/data/users.json');
-  const users = usersData as User[];
+  // Fetch nearby pick requests from API
+  useEffect(() => {
+    const fetchPickRequests = async () => {
+      if (!userCoordinates) {
+        return;
+      }
+
+      // If not authenticated, show dummy data instead
+      if (!isAuthenticated) {
+        console.log('Not authenticated, showing dummy users data');
+        setIsLoadingPickRequests(false);
+        return;
+      }
+
+      setIsLoadingPickRequests(true);
+      try {
+        const requests = await getNearbyPickRequests(
+          userCoordinates.latitude,
+          userCoordinates.longitude,
+          5000 // 5km radius
+        );
+        setPickRequests(requests);
+        console.log('Fetched pick requests:', requests.length);
+      } catch (error) {
+        console.error('Error fetching pick requests:', error);
+        // On error, fall back to dummy data
+        console.log('Falling back to dummy users data');
+        setPickRequests([]);
+        // Don't show alert if falling back to dummy data
+        // Alert.alert(
+        //   'Error',
+        //   'Failed to load nearby pick requests. Showing available users instead.',
+        //   [{ text: 'OK' }]
+        // );
+      } finally {
+        setIsLoadingPickRequests(false);
+      }
+    };
+
+    fetchPickRequests();
+  }, [isAuthenticated, userCoordinates]);
   
-  // Add default activities if not present
-  const usersWithActivities = users.map((user) => ({
-    ...user,
-    activity: user.activity || 'Coffee', // Default activity
-  }));
-  
-  const handleMarkerPress = (user: User) => {
-    setSelectedUser(user);
+  const handleMarkerPress = (pickRequest: PickRequest) => {
+    setSelectedPickRequest(pickRequest);
     setModalVisible(true);
   };
   
-  const handlePick = () => {
-    if (selectedUser) {
-      Alert.alert('Pick', `You picked ${selectedUser.name}!`, [{ text: 'OK' }]);
-      // TODO: Add logic to handle pick action
+  const handlePick = async () => {
+    if (!selectedPickRequest) return;
 
-
-
-
+    if (!isAuthenticated) {
+      Alert.alert('Authentication Required', 'Please login to send a pick request.', [
+        { text: 'OK' },
+      ]);
+      setModalVisible(false);
+      return;
     }
-    setModalVisible(false);
-    setSelectedUser(null);
+
+    setIsSendingPick(true);
+    try {
+      await sendPickRequest(selectedPickRequest.pickRequestId);
+      Alert.alert(
+        'Pick Request Sent!',
+        `You sent a pick request to ${selectedPickRequest.userName}. They will be notified.`,
+        [{ text: 'OK' }]
+      );
+      // Remove the picked request from the list since it's now MATCHED
+      setPickRequests((prev) =>
+        prev.filter((req) => req.pickRequestId !== selectedPickRequest.pickRequestId)
+      );
+    } catch (error: any) {
+      console.error('Error sending pick request:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to send pick request. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsSendingPick(false);
+      setModalVisible(false);
+      setSelectedPickRequest(null);
+    }
   };
   
   const handleNoPick = () => {
     setModalVisible(false);
-    setSelectedUser(null);
+    setSelectedPickRequest(null);
   };
 
-  console.log('Total users to display:', users.length);
+  console.log('Total pick requests to display:', pickRequests.length);
   console.log('Current user coordinates:', userCoordinates);
 
   // Wait for location before showing map
@@ -158,24 +217,6 @@ export default function MapScreen() {
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading map...</Text>
-        </View>
-      </View>
-    );
-  }
-
-  // Web fallback
-  if (Platform.OS === 'web') {
-    return (
-      <View style={styles.container}>
-        <View style={[styles.map, styles.webFallback]}>
-          <View style={styles.webFallbackContent}>
-            <Text style={styles.webFallbackText}>
-              Maps are only available on iOS and Android devices.
-            </Text>
-            <Text style={styles.webFallbackText}>
-              Current Location: {userCoordinates ? `${region.latitude.toFixed(4)}, ${region.longitude.toFixed(4)}` : 'Loading...'}
-            </Text>
-          </View>
         </View>
       </View>
     );
@@ -198,7 +239,8 @@ export default function MapScreen() {
         mapType="standard"
         loadingEnabled={true}
         loadingIndicatorColor="#5213FE"
-        loadingBackgroundColor="#1F1C39">
+        loadingBackgroundColor="#1F1C39"
+        {...(Platform.OS === 'web' && GOOGLE_MAPS_API_KEY ? { googleMapsApiKey: GOOGLE_MAPS_API_KEY } : {})}>
         
         {/* Display current user's location - shown as a green marker */}
         {userCoordinates && locationGranted && locationEnabled && (
@@ -210,23 +252,63 @@ export default function MapScreen() {
           />
         )}
         
-        {/* Display all other users' markers with purple pins */}
-        {usersWithActivities.map((user) => {
-          console.log(`Rendering marker for ${user.name} at ${user.lat}, ${user.long}`);
+        {/* Display pick request markers from API */}
+        {pickRequests.map((pickRequest) => {
+          console.log(
+            `Rendering marker for ${pickRequest.userName} at ${pickRequest.latitude}, ${pickRequest.longitude}`
+          );
           return (
             <Marker
-              key={user.id}
+              key={`pick-${pickRequest.pickRequestId}`}
+              coordinate={{
+                latitude: pickRequest.latitude,
+                longitude: pickRequest.longitude,
+              }}
+              title={pickRequest.userName}
+              description={pickRequest.activityType || 'Available'}
+              pinColor="#5213FE"
+              onPress={() => handleMarkerPress(pickRequest)}
+            />
+          );
+        })}
+        
+        {/* Display dummy users as fallback markers when API data is not available */}
+        {pickRequests.length === 0 && !isLoadingPickRequests && dummyUsers.map((user) => {
+          // Convert dummy user to PickRequest-like structure for display
+          const dummyPickRequest: PickRequest = {
+            pickRequestId: user.id,
+            userId: user.id,
+            userName: user.name,
+            activityType: 'COFFEE',
+            durationMinutes: 60,
+            latitude: user.lat,
+            longitude: user.long,
+            status: 'ACTIVE',
+            createdAt: new Date().toISOString(),
+          };
+          
+          return (
+            <Marker
+              key={`dummy-${user.id}`}
               coordinate={{
                 latitude: user.lat,
                 longitude: user.long,
               }}
               title={user.name}
-              description={user.activity || 'Available'}
-              pinColor="#5213FE"
-              onPress={() => handleMarkerPress(user)}
+              description="Available"
+              pinColor="#FF6B6B"
+              onPress={() => handleMarkerPress(dummyPickRequest)}
             />
           );
         })}
+        
+        {/* Show loading indicator when fetching pick requests */}
+        {isLoadingPickRequests && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#5213FE" />
+            <Text style={styles.loadingText}>Loading nearby requests...</Text>
+          </View>
+        )}
       </MapView>
       
       {/* User Details Modal/Lightbox */}
@@ -245,42 +327,64 @@ export default function MapScreen() {
             </TouchableOpacity>
             
             {/* User Avatar */}
-            {selectedUser?.image ? (
-              <Image
-                source={{ uri: selectedUser.image }}
-                style={styles.avatar}
-                resizeMode="cover"
-              />
-            ) : (
+            {selectedPickRequest?.userId ? (
               <View style={[styles.avatar, styles.avatarPlaceholder]}>
                 <Text style={styles.avatarPlaceholderText}>
-                  {selectedUser?.name?.charAt(0) || '?'}
+                  {selectedPickRequest.userName?.charAt(0) || '?'}
                 </Text>
+              </View>
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <Text style={styles.avatarPlaceholderText}>?</Text>
               </View>
             )}
             
             {/* User Name */}
-            <Text style={styles.userName}>{selectedUser?.name}</Text>
+            <Text style={styles.userName}>{selectedPickRequest?.userName || 'Unknown'}</Text>
             
             {/* Activity */}
             <View style={styles.activityContainer}>
               <Text style={styles.activityLabel}>Activity:</Text>
-              <Text style={styles.activityText}>{selectedUser?.activity || 'Available'}</Text>
+              <Text style={styles.activityText}>
+                {selectedPickRequest?.activityType || 'Available'}
+              </Text>
             </View>
+            
+            {/* Subject if available */}
+            {selectedPickRequest?.subject && (
+              <View style={styles.subjectContainer}>
+                <Text style={styles.subjectText}>{selectedPickRequest.subject}</Text>
+              </View>
+            )}
+            
+            {/* Distance if available */}
+            {selectedPickRequest?.distanceMeters && (
+              <View style={styles.distanceContainer}>
+                <Text style={styles.distanceText}>
+                  {(selectedPickRequest.distanceMeters / 1000).toFixed(1)} km away
+                </Text>
+              </View>
+            )}
             
             {/* Action Buttons */}
             <View style={styles.buttonContainer}>
               <TouchableOpacity
-                style={[styles.button, styles.pickButton]}
+                style={[styles.button, styles.pickButton, isSendingPick && styles.buttonDisabled]}
                 onPress={handlePick}
+                disabled={isSendingPick}
                 activeOpacity={0.8}>
-                <Text style={styles.pickButtonText}>Pick</Text>
+                {isSendingPick ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.pickButtonText}>Pick</Text>
+                )}
               </TouchableOpacity>
               
               <TouchableOpacity
                 style={[styles.button, styles.noPickButton]}
                 onPress={handleNoPick}
-                activeOpacity={0.8}>
+                activeOpacity={0.8}
+                disabled={isSendingPick}>
                 <Text style={styles.noPickButtonText}>No Pick</Text>
               </TouchableOpacity>
             </View>
@@ -308,6 +412,18 @@ const styles = StyleSheet.create({
   loadingText: {
     color: '#ffffff',
     fontSize: 16,
+    marginTop: 10,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 20,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    backgroundColor: 'rgba(31, 28, 57, 0.8)',
+    padding: 15,
+    borderRadius: 10,
+    marginHorizontal: 20,
   },
   webFallback: {
     justifyContent: 'center',
@@ -401,6 +517,23 @@ const styles = StyleSheet.create({
     color: '#5213FE',
     fontWeight: '600',
   },
+  subjectContainer: {
+    marginBottom: 12,
+    paddingHorizontal: 16,
+  },
+  subjectText: {
+    fontSize: 14,
+    color: '#A0A0A0',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  distanceContainer: {
+    marginBottom: 12,
+  },
+  distanceText: {
+    fontSize: 12,
+    color: '#A0A0A0',
+  },
   buttonContainer: {
     flexDirection: 'row',
     width: '100%',
@@ -415,6 +548,9 @@ const styles = StyleSheet.create({
   },
   pickButton: {
     backgroundColor: '#5213FE',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   pickButtonText: {
     color: '#ffffff',

@@ -1,10 +1,18 @@
-// Web-specific version of map.tsx - doesn't import react-native-maps
+// Web-specific version of map.tsx - uses @teovilla/react-native-web-maps via Metro alias
 import { StyleSheet, View, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
 import { useEffect, useState } from 'react';
 import * as Location from 'expo-location';
-import { DEFAULT_MAP_SETTINGS } from '@/constants/maps';
+import { DEFAULT_MAP_SETTINGS, GOOGLE_MAPS_API_KEY } from '@/constants/maps';
+
+// Import react-native-maps - Metro will alias to @teovilla/react-native-web-maps on web
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const MapsModule = require('react-native-maps');
+const MapView = MapsModule.default;
+const Marker = MapsModule.Marker;
+const Circle = MapsModule.Circle;
+const PROVIDER_GOOGLE = MapsModule.PROVIDER_GOOGLE;
 
 export default function MapScreen() {
   const colors = Colors.light;
@@ -93,19 +101,67 @@ export default function MapScreen() {
     );
   }
 
-  // Web fallback - show message that maps are not supported on web
+  // Load users data
+  const usersData = require('@/assets/data/users.json');
+  const users = usersData as { id: number; name: string; lat: number; long: number; image?: string }[];
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.mapContainer, styles.webFallback]}>
-        <View style={styles.webFallbackContent}>
-          <View style={styles.webFallbackText}>
-            Maps are only available on iOS and Android devices.
-          </View>
-          <View style={styles.webFallbackText}>
-            Current Location: {region.latitude.toFixed(4)}, {region.longitude.toFixed(4)}
-          </View>
-        </View>
-      </View>
+      <MapView 
+        provider={PROVIDER_GOOGLE}
+        style={styles.mapContainer}
+        initialRegion={region}
+        region={region}
+        showsUserLocation={locationGranted && locationEnabled}
+        showsMyLocationButton={true}
+        showsCompass={true}
+        zoomEnabled={true}
+        scrollEnabled={true}
+        pitchEnabled={true}
+        rotateEnabled={true}
+        mapType="standard"
+        {...(Platform.OS === 'web' && GOOGLE_MAPS_API_KEY ? { googleMapsApiKey: GOOGLE_MAPS_API_KEY } : {})}
+        customMapStyle={[
+          {
+            featureType: 'all',
+            elementType: 'geometry',
+            stylers: [{ color: '#1F1C39' }],
+          },
+          {
+            featureType: 'all',
+            elementType: 'labels.text.fill',
+            stylers: [{ color: '#ffffff' }],
+          },
+          {
+            featureType: 'all',
+            elementType: 'labels.text.stroke',
+            stylers: [{ color: '#000000' }],
+          },
+        ]}>
+        {/* User's current location - shown as a green circle */}
+        {userCoordinates && locationGranted && locationEnabled && (
+          <Circle
+            center={userCoordinates}
+            radius={100}
+            strokeWidth={3}
+            strokeColor="#FFFFFF"
+            fillColor="rgba(0, 255, 0, 0.3)"
+          />
+        )}
+        
+        {/* Display user markers */}
+        {users.map((user) => (
+          <Marker
+            key={user.id}
+            coordinate={{
+              latitude: user.lat,
+              longitude: user.long,
+            }}
+            title={user.name}
+            pinColor="#5213FE"
+          />
+        ))}
+      </MapView>
       <SafeAreaView edges={['bottom']} style={styles.tabBarContainer}>
         {/* Tab bar content can go here */}
       </SafeAreaView>
@@ -128,19 +184,41 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
-  webFallback: {
+  tabBar: {
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    height: 60,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+    paddingHorizontal: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: -2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
-  webFallbackContent: {
-    padding: 20,
+  pickButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 25,
+    minWidth: 120,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  webFallbackText: {
-    color: '#ffffff',
+  pickButtonText: {
+    color: '#fff',
     fontSize: 16,
-    marginVertical: 10,
-    textAlign: 'center',
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
 });
-

@@ -1,15 +1,41 @@
-// Web-specific version of (tabs)/map.tsx - doesn't import react-native-maps
-import { StyleSheet, View, Alert, Platform } from 'react-native';
+// Web-specific version of (tabs)/map.tsx - uses @teovilla/react-native-web-maps via Metro alias
+import { StyleSheet, View, Alert, Text, Modal, TouchableOpacity, Image, Platform } from 'react-native';
 import { useEffect, useState } from 'react';
 import * as Location from 'expo-location';
-import { DEFAULT_MAP_SETTINGS } from '@/constants/maps';
+import { GOOGLE_MAPS_API_KEY } from '@/constants/maps';
+
+// Import react-native-maps - Metro will alias to @teovilla/react-native-web-maps on web
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const MapsModule = require('react-native-maps');
+const MapView = MapsModule.default;
+const Marker = MapsModule.Marker;
+const PROVIDER_DEFAULT = MapsModule.PROVIDER_DEFAULT;
+
+// Default map settings
+const DEFAULT_REGION = {
+  latitude: 50.8503,
+  longitude: 4.3517,
+  latitudeDelta: 0.0922,
+  longitudeDelta: 0.0421,
+};
+
+type User = {
+  id: number;
+  name: string;
+  lat: number;
+  long: number;
+  image?: string;
+  activity?: string;
+};
 
 export default function MapScreen() {
   const [locationGranted, setLocationGranted] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [initialLocation, setInitialLocation] = useState<Location.LocationObject | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
-  const [region, setRegion] = useState(DEFAULT_MAP_SETTINGS.initialRegion);
+  const [region, setRegion] = useState(DEFAULT_REGION);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   useEffect(() => {
     // Request location permissions and get initial location
@@ -61,8 +87,8 @@ export default function MapScreen() {
         setRegion({
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
-          latitudeDelta: DEFAULT_MAP_SETTINGS.initialRegion.latitudeDelta,
-          longitudeDelta: DEFAULT_MAP_SETTINGS.initialRegion.longitudeDelta,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
         });
       } catch (error) {
         console.error('Error getting location:', error);
@@ -76,7 +102,7 @@ export default function MapScreen() {
     })();
   }, []);
 
-  // Use user's location coordinates
+  // Use user's current location coordinates
   const userCoordinates = initialLocation 
     ? {
         latitude: initialLocation.coords.latitude,
@@ -84,28 +110,156 @@ export default function MapScreen() {
       }
     : null;
 
-  // Wait for location before showing map - always use user's location
+  // Load users data
+  const usersData = require('@/assets/data/users.json');
+  const users = usersData as User[];
+  
+  // Add default activities if not present
+  const usersWithActivities = users.map((user) => ({
+    ...user,
+    activity: user.activity || 'Coffee', // Default activity
+  }));
+  
+  const handleMarkerPress = (user: User) => {
+    setSelectedUser(user);
+    setModalVisible(true);
+  };
+  
+  const handlePick = () => {
+    if (selectedUser) {
+      Alert.alert('Pick', `You picked ${selectedUser.name}!`, [{ text: 'OK' }]);
+      // TODO: Add logic to handle pick action
+    }
+    setModalVisible(false);
+    setSelectedUser(null);
+  };
+  
+  const handleNoPick = () => {
+    setModalVisible(false);
+    setSelectedUser(null);
+  };
+
+  console.log('Total users to display:', users.length);
+  console.log('Current user coordinates:', userCoordinates);
+
+  // Wait for location before showing map
   if (isLoadingLocation) {
     return (
       <View style={styles.container}>
-        <View style={styles.map} />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading map...</Text>
+        </View>
       </View>
     );
   }
 
-  // Web fallback - show message that maps are not supported on web
   return (
     <View style={styles.container}>
-      <View style={[styles.map, styles.webFallback]}>
-        <View style={styles.webFallbackContent}>
-          <View style={styles.webFallbackText}>
-            Maps are only available on iOS and Android devices.
-          </View>
-          <View style={styles.webFallbackText}>
-            Current Location: {userCoordinates ? `${region.latitude.toFixed(4)}, ${region.longitude.toFixed(4)}` : 'Loading...'}
+      <MapView
+        provider={PROVIDER_DEFAULT}
+        style={styles.map}
+        initialRegion={region}
+        region={region}
+        showsUserLocation={locationGranted && locationEnabled}
+        showsMyLocationButton={true}
+        showsCompass={true}
+        zoomEnabled={true}
+        scrollEnabled={true}
+        pitchEnabled={true}
+        rotateEnabled={true}
+        mapType="standard"
+        loadingEnabled={true}
+        loadingIndicatorColor="#5213FE"
+        loadingBackgroundColor="#1F1C39"
+        {...(Platform.OS === 'web' && GOOGLE_MAPS_API_KEY ? { googleMapsApiKey: GOOGLE_MAPS_API_KEY } : {})}>
+        
+        {/* Display current user's location - shown as a green marker */}
+        {userCoordinates && locationGranted && locationEnabled && (
+          <Marker
+            coordinate={userCoordinates}
+            title="You are here"
+            description="Your current location"
+            pinColor="#00FF00"
+          />
+        )}
+        
+        {/* Display all other users' markers with purple pins */}
+        {usersWithActivities.map((user) => {
+          console.log(`Rendering marker for ${user.name} at ${user.lat}, ${user.long}`);
+          return (
+            <Marker
+              key={user.id}
+              coordinate={{
+                latitude: user.lat,
+                longitude: user.long,
+              }}
+              title={user.name}
+              description={user.activity || 'Available'}
+              pinColor="#5213FE"
+              onPress={() => handleMarkerPress(user)}
+            />
+          );
+        })}
+      </MapView>
+      
+      {/* User Details Modal/Lightbox */}
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleNoPick}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Close button */}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={handleNoPick}>
+              <Text style={styles.closeButtonText}>×</Text>
+            </TouchableOpacity>
+            
+            {/* User Avatar */}
+            {selectedUser?.image ? (
+              <Image
+                source={{ uri: selectedUser.image }}
+                style={styles.avatar}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <Text style={styles.avatarPlaceholderText}>
+                  {selectedUser?.name?.charAt(0) || '?'}
+                </Text>
+              </View>
+            )}
+            
+            {/* User Name */}
+            <Text style={styles.userName}>{selectedUser?.name}</Text>
+            
+            {/* Activity */}
+            <View style={styles.activityContainer}>
+              <Text style={styles.activityLabel}>Activity:</Text>
+              <Text style={styles.activityText}>{selectedUser?.activity || 'Available'}</Text>
+            </View>
+            
+            {/* Action Buttons */}
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity
+                style={[styles.button, styles.pickButton]}
+                onPress={handlePick}
+                activeOpacity={0.8}>
+                <Text style={styles.pickButtonText}>Pick</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.button, styles.noPickButton]}
+                onPress={handleNoPick}
+                activeOpacity={0.8}>
+                <Text style={styles.noPickButtonText}>No Pick</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
+      </Modal>
     </View>
   );
 }
@@ -118,20 +272,121 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  webFallback: {
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#1F1C39',
   },
-  webFallbackContent: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  webFallbackText: {
+  loadingText: {
     color: '#ffffff',
     fontSize: 16,
-    marginVertical: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#2A2540',
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  closeButtonText: {
+    color: '#ffffff',
+    fontSize: 24,
+    lineHeight: 28,
+    fontWeight: '300',
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: 16,
+    borderWidth: 3,
+    borderColor: '#5213FE',
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#5213FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarPlaceholderText: {
+    color: '#ffffff',
+    fontSize: 40,
+    fontWeight: 'bold',
+  },
+  userName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 12,
     textAlign: 'center',
   },
+  activityContainer: {
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  activityLabel: {
+    fontSize: 14,
+    color: '#A0A0A0',
+    marginBottom: 4,
+  },
+  activityText: {
+    fontSize: 18,
+    color: '#5213FE',
+    fontWeight: '600',
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickButton: {
+    backgroundColor: '#5213FE',
+  },
+  pickButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  noPickButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  noPickButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
-
