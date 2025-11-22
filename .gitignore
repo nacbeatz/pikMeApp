@@ -1,0 +1,23 @@
+# Node/Expo
+mobile/node_modules/
+mobile/.expo/
+mobile/.expo-shared/
+mobile/.gradle/
+mobile/android/
+mobile/ios/
+mobile/.vscode/
+
+# Java / Maven / Gradle
+backend/.mvn/
+backend/target/
+backend/build/
+backend/.gradle/
+backend/*.iml
+
+# System/IDE
+.DS_Store
+.vscode/
+.idea/
+.env
+.env.local
+*.log
