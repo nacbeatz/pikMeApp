@@ -1,4 +1,4 @@
-package com.oddo.hackaton.backend.controller;
+package com.oddo.hackaton.backend.controllers;
 
 import com.oddo.hackaton.backend.model.dto.reponse.AuthResponse;
 import com.oddo.hackaton.backend.model.dto.request.LoginRequest;
