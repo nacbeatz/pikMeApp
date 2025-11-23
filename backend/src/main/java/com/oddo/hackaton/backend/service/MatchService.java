@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 
 @Service
@@ -103,6 +104,22 @@ public class MatchService {
 
         Match updatedMatch = matchRepository.save(match);
         return mapToResponse(updatedMatch);
+    }
+
+    /**
+     * Get all matches for the current user (as picker or requester).
+     */
+    @Transactional(readOnly = true)
+    public List<MatchResponse> getMyMatches(String userEmail) {
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        List<Match> matches = matchRepository.findByUserId(user.getId());
+        DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+
+        return matches.stream()
+                .map(this::mapToResponse)
+                .toList();
     }
 
     private MatchResponse mapToResponse(Match match) {

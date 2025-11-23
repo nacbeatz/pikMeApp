@@ -66,6 +66,12 @@ async function authenticatedFetch(
 
   const url = `${API_BASE}${endpoint}`;
   
+  console.log('Making authenticated request:', {
+    url,
+    method: options.method || 'GET',
+    hasToken: !!token,
+  });
+  
   return fetch(url, {
     ...options,
     headers,
@@ -96,7 +102,7 @@ export async function getCurrentUser(): Promise<UserProfile> {
 export async function getNearbyPickRequests(
   latitude: number,
   longitude: number,
-  radius: number = 5000
+  radius: number = 50000
 ): Promise<PickRequest[]> {
   const params = new URLSearchParams({
     latitude: latitude.toString(),
@@ -111,7 +117,9 @@ export async function getNearbyPickRequests(
     throw new Error(error.message || 'Failed to get nearby pick requests');
   }
 
-  return response.json();
+  const data = await response.json();
+  console.log('Nearby pick requests:', data);
+  return data;
 }
 
 /**
@@ -193,5 +201,99 @@ export async function getMyPickRequests(): Promise<PickRequest[]> {
   }
 
   return response.json();
+}
+
+/**
+ * Get my matches (approved/matched/picked requests)
+ * GET /api/matches/my
+ * Falls back to getting matches from MATCHED pick requests if endpoint is not available
+ */
+export async function getMyMatches(): Promise<Match[]> {
+  try {
+    console.log('Fetching matches from:', `${API_BASE}/api/matches/my`);
+    const response = await authenticatedFetch('/api/matches/my');
+    
+    console.log('Matches response status:', response.status, response.statusText);
+    
+    if (!response.ok) {
+      // If it's a 404, try fallback to get matches from pick requests
+      if (response.status === 404) {
+        console.warn('Endpoint /api/matches/my not found (404). Using fallback to get matches from pick requests.');
+        return await getMyMatchesFallback();
+      }
+      
+      // Try to get error message from response
+      let errorMessage = 'Failed to get my matches';
+      let errorData: any = null;
+      
+      try {
+        const responseText = await response.text();
+        console.log('Error response text:', responseText);
+        
+        if (responseText) {
+          errorData = JSON.parse(responseText);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        }
+      } catch {
+        // If response is not JSON, use status text
+        errorMessage = response.statusText || errorMessage;
+        console.log('Could not parse error response as JSON');
+      }
+      
+      console.error('Error getting matches:', {
+        status: response.status,
+        statusText: response.statusText,
+        message: errorMessage,
+        url: `${API_BASE}/api/matches/my`,
+        errorData,
+      });
+      
+      throw new Error(errorMessage);
+    }
+
+    const matches = await response.json();
+    console.log('Successfully fetched matches from backend:', matches);
+    return matches;
+  } catch (error: any) {
+    console.error('Error fetching matches, trying fallback:', error);
+    // Try fallback if main endpoint fails
+    try {
+      return await getMyMatchesFallback();
+    } catch (fallbackError) {
+      console.error('Fallback also failed:', fallbackError);
+      return [];
+    }
+  }
+}
+
+/**
+ * Fallback: Get matches from MATCHED pick requests
+ * This is used when /api/matches/my endpoint is not available
+ */
+async function getMyMatchesFallback(): Promise<Match[]> {
+  try {
+    console.log('Using fallback: Getting matches from pick requests...');
+    const myPickRequests = await getMyPickRequests();
+    const matchedRequests = myPickRequests.filter(pr => pr.status === 'MATCHED');
+    
+    console.log('Found matched pick requests:', matchedRequests.length);
+    
+    // Convert matched pick requests to match-like objects
+    // Note: This is a simplified version - we don't have picker info from pick requests
+    return matchedRequests.map(pr => ({
+      matchId: pr.pickRequestId, // Temporary ID
+      pickRequestId: pr.pickRequestId,
+      pickerId: 0, // Unknown - would need backend to provide
+      pickerName: 'Unknown', // Unknown - would need backend to provide
+      requesterId: pr.userId,
+      requesterName: pr.userName,
+      status: 'ACCEPTED' as const, // Assume matched means accepted
+      createdAt: pr.createdAt,
+      approvedAt: pr.createdAt,
+    }));
+  } catch (err) {
+    console.error('Error getting matches from pick requests fallback:', err);
+    return [];
+  }
 }
 

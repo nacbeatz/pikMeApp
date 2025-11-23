@@ -10,6 +10,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/matches")
 @RequiredArgsConstructor
@@ -53,5 +55,18 @@ public class MatchController {
 
         MatchResponse match = matchService.respondToMatch(matchId, approved, userDetails.getUsername());
         return ResponseEntity.ok(match);
+    }
+
+    /**
+     * Get current user's matches (both as picker and requester).
+     *
+     * GET /api/matches/my
+     */
+    @GetMapping("/my")
+    public ResponseEntity<List<MatchResponse>> getMyMatches(
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        List<MatchResponse> matches = matchService.getMyMatches(userDetails.getUsername());
+        return ResponseEntity.ok(matches);
     }
 }

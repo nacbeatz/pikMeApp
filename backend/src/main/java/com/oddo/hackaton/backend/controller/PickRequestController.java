@@ -65,18 +65,18 @@ public class PickRequestController
      *
      * @param latitude Current user latitude
      * @param longitude Current user longitude
-     * @param radiusMeters Search radius in meters (default 5000m = 5km)
+     * @param radius Search radius in meters (default 5000m = 5km)
      * @return List of nearby pick requests with user info
      */
     @GetMapping("/nearby")
     public ResponseEntity<List<NearbyPickRequestResponse>> getNearbyPickRequests(
             @RequestParam Double latitude,
             @RequestParam Double longitude,
-            @RequestParam(defaultValue = "5000") Double radiusMeters,
+            @RequestParam(defaultValue = "50000") Double radius,
             @AuthenticationPrincipal UserDetails userDetails) {
 
         List<NearbyPickRequestResponse> nearbyRequests =
-                pickRequestService.findNearbyPickRequests(latitude, longitude, radiusMeters, userDetails.getUsername());
+                pickRequestService.findNearbyPickRequests(latitude, longitude, radius, userDetails.getUsername());
 
         return ResponseEntity.ok(nearbyRequests);
     }

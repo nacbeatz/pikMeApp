@@ -1,6 +1,7 @@
 import { StyleSheet, View, Alert, Text, Modal, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
-import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import { GOOGLE_MAPS_API_KEY } from '@/constants/maps';
 import { getNearbyPickRequests, sendPickRequest, type PickRequest } from '@/services/api';
@@ -11,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 const MapsModule = require('react-native-maps');
 const MapView = MapsModule.default;
 const Marker = MapsModule.Marker;
+const Polyline = MapsModule.Polyline;
 const PROVIDER_DEFAULT = MapsModule.PROVIDER_DEFAULT;
 
 // Default map settings
@@ -23,6 +25,16 @@ const DEFAULT_REGION = {
 
 export default function MapScreen() {
   const { isAuthenticated } = useAuth();
+  const params = useLocalSearchParams<{
+    trackMatch?: string;
+    requesterLat?: string;
+    requesterLng?: string;
+    pickerName?: string;
+    requesterName?: string;
+    pickerId?: string;
+    requesterId?: string;
+  }>();
+  
   const [locationGranted, setLocationGranted] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [initialLocation, setInitialLocation] = useState<Location.LocationObject | null>(null);
@@ -33,17 +45,22 @@ export default function MapScreen() {
   const [pickRequests, setPickRequests] = useState<PickRequest[]>([]);
   const [isLoadingPickRequests, setIsLoadingPickRequests] = useState(false);
   const [isSendingPick, setIsSendingPick] = useState(false);
-
-  // Load dummy users data as fallback
-  const dummyUsersData = require('@/assets/data/users.json');
-  type DummyUser = {
-    id: number;
-    name: string;
-    lat: number;
-    long: number;
-    image?: string;
-  };
-  const dummyUsers = dummyUsersData as DummyUser[];
+  
+  // Tracking state
+  const [isTracking, setIsTracking] = useState(false);
+  const [trackingMatch, setTrackingMatch] = useState<{
+    matchId: number;
+    requesterLat: number;
+    requesterLng: number;
+    pickerName: string;
+    requesterName: string;
+    pickerId: number;
+    requesterId: number;
+  } | null>(null);
+  
+  // Live location tracking
+  const [currentLocation, setCurrentLocation] = useState<Location.LocationObject | null>(null);
+  const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
 
   useEffect(() => {
     // Request location permissions and get initial location
@@ -111,46 +128,142 @@ export default function MapScreen() {
   }, []);
 
   // Use user's current location coordinates (memoized to avoid useEffect dependency issues)
+  // When tracking, use live location; otherwise use initial location
   const userCoordinates = useMemo(() => {
+    if (isTracking && currentLocation) {
+      return {
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+      };
+    }
     return initialLocation
       ? {
           latitude: initialLocation.coords.latitude,
           longitude: initialLocation.coords.longitude,
         }
       : null;
-  }, [initialLocation]);
+  }, [initialLocation, currentLocation, isTracking]);
+
+  // Ref to track if a fetch is in progress to prevent duplicate calls
+  const isFetchingRef = useRef(false);
+
+  // Check if we should start tracking from params
+  useEffect(() => {
+    if (params.trackMatch && params.requesterLat && params.requesterLng) {
+      setIsTracking(true);
+      setTrackingMatch({
+        matchId: parseInt(params.trackMatch, 10),
+        requesterLat: parseFloat(params.requesterLat),
+        requesterLng: parseFloat(params.requesterLng),
+        pickerName: params.pickerName || 'Picker',
+        requesterName: params.requesterName || 'Requester',
+        pickerId: params.pickerId ? parseInt(params.pickerId, 10) : 0,
+        requesterId: params.requesterId ? parseInt(params.requesterId, 10) : 0,
+      });
+    }
+  }, [params.trackMatch, params.requesterLat, params.requesterLng, params.pickerName, params.requesterName, params.pickerId, params.requesterId]);
+
+  // Start live location tracking when in tracking mode
+  useEffect(() => {
+    if (isTracking && locationGranted && locationEnabled) {
+      // Start watching location updates
+      const startWatching = async () => {
+        try {
+          const subscription = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.Highest,
+              timeInterval: 2000, // Update every 2 seconds
+              distanceInterval: 5, // Update every 5 meters
+            },
+            (location) => {
+              setCurrentLocation(location);
+              // Update map region to show both locations
+              if (trackingMatch) {
+                const centerLat = (location.coords.latitude + trackingMatch.requesterLat) / 2;
+                const centerLng = (location.coords.longitude + trackingMatch.requesterLng) / 2;
+                
+                // Calculate delta to fit both points
+                const latDelta = Math.abs(location.coords.latitude - trackingMatch.requesterLat) * 1.5;
+                const lngDelta = Math.abs(location.coords.longitude - trackingMatch.requesterLng) * 1.5;
+                
+                setRegion({
+                  latitude: centerLat,
+                  longitude: centerLng,
+                  latitudeDelta: Math.max(latDelta, 0.01),
+                  longitudeDelta: Math.max(lngDelta, 0.01),
+                });
+              }
+            }
+          );
+          locationSubscriptionRef.current = subscription;
+        } catch (error) {
+          console.error('Error starting location watch:', error);
+        }
+      };
+      
+      startWatching();
+    }
+    
+    // Cleanup: stop watching when tracking stops
+    return () => {
+      if (locationSubscriptionRef.current) {
+        locationSubscriptionRef.current.remove();
+        locationSubscriptionRef.current = null;
+      }
+    };
+  }, [isTracking, locationGranted, locationEnabled, trackingMatch]);
 
   // Function to fetch nearby pick requests (extracted for reuse)
+  // Note: Authentication is NOT required to view pick requests, only to pick someone
   const fetchPickRequests = useCallback(async () => {
     if (!userCoordinates) {
-      return;
-    }
-
-    // If not authenticated, show dummy data instead
-    if (!isAuthenticated) {
-      console.log('Not authenticated, showing dummy users data');
+      console.log('No user coordinates available yet, skipping fetch');
       setIsLoadingPickRequests(false);
       return;
     }
 
+    // Prevent multiple simultaneous calls
+    if (isFetchingRef.current) {
+      console.log('Already fetching pick requests, skipping duplicate call');
+      return;
+    }
+
+    isFetchingRef.current = true;
     setIsLoadingPickRequests(true);
     try {
-      const requests = await getNearbyPickRequests(
-        userCoordinates.latitude,
-        userCoordinates.longitude,
-        5000 // 5km radius
-      );
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout')), 10000); // 10 second timeout
+      });
+
+      const requests = await Promise.race([
+        getNearbyPickRequests(
+          userCoordinates.latitude,
+          userCoordinates.longitude,
+          5000 // 5km radius
+        ),
+        timeoutPromise,
+      ]);
+
       setPickRequests(requests);
-      console.log('Fetched pick requests:', requests.length);
-    } catch (error) {
+      console.log('Fetched pick requests from database:', requests.length);
+    } catch (error: any) {
       console.error('Error fetching pick requests:', error);
-      // On error, fall back to dummy data
-      console.log('Falling back to dummy users data');
+      // On error, clear requests and show empty state
       setPickRequests([]);
+      // Show error message to user
+      if (error?.message === 'Request timeout') {
+        Alert.alert(
+          'Timeout',
+          'Request took too long. Please check your connection and try again.',
+          [{ text: 'OK' }]
+        );
+      }
     } finally {
       setIsLoadingPickRequests(false);
+      isFetchingRef.current = false;
     }
-  }, [isAuthenticated, userCoordinates]);
+  }, [userCoordinates]);
 
   // Fetch nearby pick requests when component mounts or when dependencies change
   useEffect(() => {
@@ -160,11 +273,17 @@ export default function MapScreen() {
   // Refresh nearby pick requests when screen is focused (e.g., after creating a pick request)
   useFocusEffect(
     useCallback(() => {
-      if (userCoordinates && isAuthenticated) {
+      // Only refresh if we have coordinates and location is loaded (authentication not required)
+      if (userCoordinates && !isLoadingLocation) {
         console.log('Map screen focused, refreshing nearby pick requests...');
-        fetchPickRequests();
+        // Small delay to avoid race conditions when navigating from other screens
+        const timer = setTimeout(() => {
+          fetchPickRequests();
+        }, 200);
+        
+        return () => clearTimeout(timer);
       }
-    }, [fetchPickRequests, userCoordinates, isAuthenticated])
+    }, [fetchPickRequests, userCoordinates, isLoadingLocation])
   );
   
   const handleMarkerPress = (pickRequest: PickRequest) => {
@@ -214,11 +333,44 @@ export default function MapScreen() {
     setSelectedPickRequest(null);
   };
 
-  console.log('Total pick requests to display:', pickRequests.length);
+  // Helper function to validate coordinates
+  const isValidCoordinate = useCallback((lat: number | null | undefined, lng: number | null | undefined): boolean => {
+    if (lat == null || lng == null) return false;
+    if (typeof lat !== 'number' || typeof lng !== 'number') return false;
+    if (isNaN(lat) || isNaN(lng)) return false;
+    if (!isFinite(lat) || !isFinite(lng)) return false;
+    return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+  }, []);
+
+  // Filter valid pick requests - show all requests with valid coordinates, regardless of status
+  const validPickRequests = useMemo(() => {
+    const filtered = pickRequests.filter((pickRequest) => {
+      const hasValidCoords = isValidCoordinate(pickRequest.latitude, pickRequest.longitude);
+      if (!hasValidCoords) {
+        console.log('Invalid coordinates for request:', pickRequest.pickRequestId, {
+          lat: pickRequest.latitude,
+          lng: pickRequest.longitude,
+          status: pickRequest.status
+        });
+      }
+      return hasValidCoords;
+    });
+    return filtered;
+  }, [pickRequests, isValidCoordinate]);
+
+  console.log('Total pick requests from API:', pickRequests.length);
+  console.log('Valid pick requests (with valid coordinates):', validPickRequests.length);
+  console.log('Pick requests details:', pickRequests.map(pr => ({
+    id: pr.pickRequestId,
+    status: pr.status,
+    lat: pr.latitude,
+    lng: pr.longitude,
+    name: pr.userName
+  })));
   console.log('Current user coordinates:', userCoordinates);
 
   // Wait for location before showing map
-  if (isLoadingLocation) {
+  if (isLoadingLocation || !userCoordinates) {
     return (
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -249,61 +401,83 @@ export default function MapScreen() {
         {...(Platform.OS === 'web' && GOOGLE_MAPS_API_KEY ? { googleMapsApiKey: GOOGLE_MAPS_API_KEY } : {})}>
         
         {/* Display current user's location - shown as a green marker */}
-        {userCoordinates && locationGranted && locationEnabled && (
+        {userCoordinates && 
+         locationGranted && 
+         locationEnabled &&
+         isValidCoordinate(userCoordinates.latitude, userCoordinates.longitude) && (
           <Marker
-            coordinate={userCoordinates}
+            coordinate={{
+              latitude: Number(userCoordinates.latitude),
+              longitude: Number(userCoordinates.longitude),
+            }}
             title="You are here"
             description="Your current location"
-            pinColor="#00FF00"
+            {...(Platform.OS === 'android' && { pinColor: '#00FF00' })}
           />
         )}
+
+        {/* Tracking mode: Show itinerary between picker and requester */}
+        {isTracking && trackingMatch && userCoordinates && 
+         isValidCoordinate(userCoordinates.latitude, userCoordinates.longitude) &&
+         isValidCoordinate(trackingMatch.requesterLat, trackingMatch.requesterLng) && (
+          <>
+            {/* Polyline showing route between picker (current user) and requester */}
+            <Polyline
+              coordinates={[
+                {
+                  latitude: Number(userCoordinates.latitude),
+                  longitude: Number(userCoordinates.longitude),
+                },
+                {
+                  latitude: trackingMatch.requesterLat,
+                  longitude: trackingMatch.requesterLng,
+                },
+              ]}
+              strokeColor="#5213FE"
+              strokeWidth={4}
+              lineDashPattern={[5, 5]}
+            />
+            
+            {/* Requester location marker */}
+            <Marker
+              coordinate={{
+                latitude: trackingMatch.requesterLat,
+                longitude: trackingMatch.requesterLng,
+              }}
+              title={trackingMatch.requesterName}
+              description="Meeting location"
+              {...(Platform.OS === 'android' && { pinColor: '#FF6B6B' })}
+            />
+          </>
+        )}
         
-        {/* Display pick request markers from API */}
-        {pickRequests.map((pickRequest) => {
-          console.log(
-            `Rendering marker for ${pickRequest.userName} at ${pickRequest.latitude}, ${pickRequest.longitude}`
-          );
+        {/* Display pick request markers from API - only active requests from database */}
+        {validPickRequests.map((pickRequest) => {
+          const lat = Number(pickRequest.latitude);
+          const lng = Number(pickRequest.longitude);
+          
+          if (!isValidCoordinate(lat, lng)) {
+            console.warn('Invalid coordinates for pick request:', pickRequest.pickRequestId);
+            return null;
+          }
+
           return (
             <Marker
               key={`pick-${pickRequest.pickRequestId}`}
               coordinate={{
-                latitude: pickRequest.latitude,
-                longitude: pickRequest.longitude,
+                latitude: lat,
+                longitude: lng,
               }}
-              title={pickRequest.userName}
-              description={pickRequest.activityType || 'Available'}
-              pinColor="#5213FE"
-              onPress={() => handleMarkerPress(pickRequest)}
-            />
-          );
-        })}
-        
-        {/* Display dummy users as fallback markers when API data is not available */}
-        {pickRequests.length === 0 && !isLoadingPickRequests && dummyUsers.map((user) => {
-          // Convert dummy user to PickRequest-like structure for display
-          const dummyPickRequest: PickRequest = {
-            pickRequestId: user.id,
-            userId: user.id,
-            userName: user.name,
-            activityType: 'COFFEE',
-            durationMinutes: 60,
-            latitude: user.lat,
-            longitude: user.long,
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString(),
-          };
-          
-          return (
-            <Marker
-              key={`dummy-${user.id}`}
-              coordinate={{
-                latitude: user.lat,
-                longitude: user.long,
+              title={String(pickRequest.userName || 'Unknown User')}
+              description={String(pickRequest.activityType || 'Available')}
+              {...(Platform.OS === 'android' && { pinColor: '#5213FE' })}
+              onPress={() => {
+                try {
+                  handleMarkerPress(pickRequest);
+                } catch (error) {
+                  console.error('Error handling marker press:', error);
+                }
               }}
-              title={user.name}
-              description="Available"
-              pinColor="#FF6B6B"
-              onPress={() => handleMarkerPress(dummyPickRequest)}
             />
           );
         })}
@@ -316,6 +490,47 @@ export default function MapScreen() {
           </View>
         )}
       </MapView>
+
+      {/* Tracking mode indicator with live status */}
+      {isTracking && trackingMatch && (
+        <View style={styles.trackingBanner}>
+          <View style={styles.trackingContent}>
+            <View style={styles.liveIndicator}>
+              <View style={styles.liveDot} />
+            </View>
+            <MaterialIcons name="navigation" size={20} color="#FFFFFF" />
+            <View style={styles.trackingTextContainer}>
+              <Text style={styles.trackingTitle}>Live Tracking Active</Text>
+              <Text style={styles.trackingSubtitle}>
+                Meeting {trackingMatch.requesterName}
+                {userCoordinates && trackingMatch && (
+                  <Text style={styles.distanceText}>
+                    {' • '}
+                    {calculateDistance(
+                      userCoordinates.latitude,
+                      userCoordinates.longitude,
+                      trackingMatch.requesterLat,
+                      trackingMatch.requesterLng
+                    ).toFixed(1)} km away
+                  </Text>
+                )}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => {
+                setIsTracking(false);
+                setTrackingMatch(null);
+                if (locationSubscriptionRef.current) {
+                  locationSubscriptionRef.current.remove();
+                  locationSubscriptionRef.current = null;
+                }
+              }}
+              style={styles.stopTrackingButton}>
+              <MaterialIcons name="close" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       
       {/* User Details Modal/Lightbox */}
       <Modal
@@ -366,7 +581,7 @@ export default function MapScreen() {
             {/* Distance if available */}
             {selectedPickRequest?.distanceMeters && (
               <View style={styles.distanceContainer}>
-                <Text style={styles.distanceText}>
+                <Text style={styles.distanceTextModal}>
                   {(selectedPickRequest.distanceMeters / 1000).toFixed(1)} km away
                 </Text>
               </View>
@@ -536,7 +751,7 @@ const styles = StyleSheet.create({
   distanceContainer: {
     marginBottom: 12,
   },
-  distanceText: {
+  distanceTextModal: {
     fontSize: 12,
     color: '#A0A0A0',
   },
@@ -573,4 +788,92 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  trackingBanner: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    backgroundColor: '#5213FE',
+    borderRadius: 12,
+    padding: 16,
+    zIndex: 100,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  trackingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  trackingTextContainer: {
+    flex: 1,
+  },
+  trackingTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  trackingSubtitle: {
+    fontSize: 14,
+    color: '#E0E0E0',
+  },
+  stopTrackingButton: {
+    padding: 4,
+  },
+  liveIndicator: {
+    width: 12,
+    height: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4CAF50',
+  },
+  liveTrackingIndicator: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 255, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  liveTrackingPulse: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#00FF00',
+  },
+  distanceText: {
+    fontSize: 12,
+    color: '#E0E0E0',
+    fontWeight: '600',
+  },
 });
+
+// Helper function to calculate distance between two coordinates (Haversine formula)
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}

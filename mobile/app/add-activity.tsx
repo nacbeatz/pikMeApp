@@ -197,7 +197,7 @@ export default function AddActivityScreen() {
 
         <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
           <Text style={styles.title}>Step 1 of 2</Text>
-          <Text style={styles.subtitle}>What would you like to do today?</Text>
+          <Text style={styles.subtitle}>Pick me for:</Text>
 
           <View style={styles.activityGrid}>
             {ACTIVITIES.map((activity) => (
@@ -222,18 +222,7 @@ export default function AddActivityScreen() {
             ))}
           </View>
 
-          <Text style={styles.orText}>OR</Text>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Enter custom activity"
-            placeholderTextColor="#A0A0A0"
-            value={customActivity}
-            onChangeText={(text) => {
-              setCustomActivity(text);
-              setSelectedActivity('');
-            }}
-          />
         </ScrollView>
 
         <View style={styles.footer}>
@@ -267,7 +256,7 @@ export default function AddActivityScreen() {
 
         <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
           <Text style={styles.title}>Step 2 of 2</Text>
-          <Text style={styles.subtitle}>How long? (Today)</Text>
+          <Text style={styles.subtitle}> Today For:</Text>
 
           <View style={styles.timeGrid}>
             {TIME_OPTIONS.map((option) => (
@@ -292,22 +281,7 @@ export default function AddActivityScreen() {
             ))}
           </View>
 
-          <Text style={styles.orText}>OR</Text>
-
-          <View style={styles.customTimeContainer}>
-            <TextInput
-              style={styles.customTimeInput}
-              placeholder="Custom (minutes)"
-              placeholderTextColor="#A0A0A0"
-              value={customTime}
-              onChangeText={(text) => {
-                setCustomTime(text);
-                setSelectedTime(null);
-              }}
-              keyboardType="numeric"
-            />
-            <Text style={styles.minutesText}>minutes</Text>
-          </View>
+      
         </ScrollView>
 
         <View style={styles.footer}>
@@ -318,7 +292,7 @@ export default function AddActivityScreen() {
             ]}
             onPress={handleTimeNext}
             disabled={!selectedTime && !customTime.trim()}>
-            <Text style={styles.nextButtonText}>Submit</Text>
+            <Text style={styles.nextButtonText}>Pick Me</Text>
             <MaterialIcons name="check" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
@@ -332,7 +306,7 @@ export default function AddActivityScreen() {
       <View style={styles.container}>
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color="#5213FE" />
-          <Text style={styles.submittingText}>Submitting your activity...</Text>
+          <Text style={styles.submittingText}>Setting your request on the map...</Text>
         </View>
       </View>
     );
@@ -352,7 +326,7 @@ export default function AddActivityScreen() {
           </View>
           <Text style={styles.resultTitle}>Success!</Text>
           <Text style={styles.resultMessage}>
-            Your activity &quot;{activity}&quot; has been added for {timeLabel} today!
+            Get ready for &quot;{activity}&quot; for {timeLabel} today!
           </Text>
 
           <View style={styles.actionButtons}>
