@@ -1,12 +1,14 @@
 import { useEffect } from 'react';
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/theme';
 
+const newLoader = require('@/assets/images/loader.gif');
+
 export default function SplashScreen() {
   const router = useRouter();
-  const colors = Colors.light;
+  const colors = Colors.dark;
 
   useEffect(() => {
 
@@ -20,11 +22,15 @@ export default function SplashScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Image
-        source={require('@/assets/images/splash-icon.png')}
+        source={require('@/assets/images/pickMeLogo.png')}
         style={styles.logo}
         contentFit="contain"
       />
-      <ActivityIndicator size="large" style={styles.loader} />
+      <Image
+        source={newLoader}
+        style={styles.customLoader}
+        contentFit="contain"
+      />
     </View>
   );
 }
@@ -40,7 +46,9 @@ const styles = StyleSheet.create({
     height: 200,
     marginBottom: 40,
   },
-  loader: {
+  customLoader: {
+    width: 80, 
+    height: 80,
     marginTop: 20,
   },
 });

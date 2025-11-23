@@ -5,12 +5,12 @@ export default function SettingsScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>
-          Settings
+          Profile
         </Text>
       </View>
       <View style={styles.content}>
         <Text style={styles.placeholder}>
-          Settings screen content goes here
+          Profile screen content goes here
         </Text>
       </View>
     </View>

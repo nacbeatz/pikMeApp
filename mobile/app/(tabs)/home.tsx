@@ -1,10 +1,11 @@
-import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Platform, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
+  const decorationImage = require('@/assets/images/person-going-to-car.png')
 
   const handlePickPress = () => {
     // Navigate to map tab
@@ -25,18 +26,21 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.contentContainer}>
+        <Image 
+          source={decorationImage}
+          style={styles.images}/>
         <View style={styles.buttonsContainer}>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={handlePickPress}
-            activeOpacity={0.8}>
-            <Text style={styles.buttonText}>Pick</Text>
-          </TouchableOpacity>
           <TouchableOpacity
             style={styles.button}
             onPress={handlePickMePress}
             activeOpacity={0.8}>
             <Text style={styles.buttonText}>Pick Me</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handlePickPress}
+            activeOpacity={0.8}>
+            <Text style={styles.buttonText}>Pick</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -89,6 +93,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     letterSpacing: 0.5,
+  },
+  images: {
+    width: 400,
+    height: 300,
+    marginBottom: 10,
   },
 });
 
