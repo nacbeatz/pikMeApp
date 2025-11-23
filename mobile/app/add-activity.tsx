@@ -1,23 +1,28 @@
+<<<<<<< HEAD
 import { useState } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Image } from 'react-native';
+=======
+import { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Alert } from 'react-native';
+>>>>>>> 16c2ec966b9cd38252e4b3a520c5fdce037a80c6
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
+import { createPickRequest } from '@/services/api';
 
 const timeLogo = require('@/assets/images/clock.png')
 const activityLogo = require('@/assets/images/activityLogo.png')
 
 const ACTIVITIES = [
-  'Coffee',
-  'Lunch',
-  'Dinner',
-  'Drinks',
-  'Walk',
-  'Study',
-  'Work',
-  'Shopping',
-  'Gym',
-  'Other',
+  'COFFEE', 
+  'WALK', 
+  'FOOD', 
+  'GAMING' ,
+  'STUDY' ,
+  'MOVIE' ,
+  'GYM' ,
+  'OTHER',
 ];
 
 const TIME_OPTIONS = [
@@ -33,14 +38,65 @@ const TIME_OPTIONS = [
 
 type Step = 'activity' | 'time' | 'submitting' | 'success' | 'failed';
 
+// Map activity names to backend ActivityType enum values
+// Backend supports: COFFEE, WALK, FOOD, GAMING, STUDY, MOVIE, GYM, OTHER
+const ACTIVITY_TYPE_MAP: Record<string, string> = {
+  'Coffee': 'COFFEE',
+  'Lunch': 'FOOD',
+  'Dinner': 'FOOD',
+  'Drinks': 'FOOD',
+  'Walk': 'WALK',
+  'Study': 'STUDY',
+  'Work': 'OTHER', // WORK not in backend enum, use OTHER
+  'Shopping': 'OTHER', // SHOPPING not in backend enum, use OTHER
+  'Gym': 'GYM',
+  'Other': 'OTHER',
+};
+
 export default function AddActivityScreen() {
   const [step, setStep] = useState<Step>('activity');
   const [selectedActivity, setSelectedActivity] = useState<string>('');
   const [customActivity, setCustomActivity] = useState('');
   const [selectedTime, setSelectedTime] = useState<number | null>(null);
   const [customTime, setCustomTime] = useState('');
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+
+  // Get user's current location
+  useEffect(() => {
+    const getLocation = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Location Permission Required',
+            'We need your location to create a pick request.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Highest,
+        });
+
+        setUserLocation({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
+      } catch (error) {
+        console.error('Error getting location:', error);
+        Alert.alert(
+          'Location Error',
+          'Could not get your location. Please enable location services.',
+          [{ text: 'OK' }]
+        );
+      }
+    };
+
+    getLocation();
+  }, []);
 
   const handleActivityNext = () => {
     if (!selectedActivity && !customActivity.trim()) {
@@ -59,6 +115,28 @@ export default function AddActivityScreen() {
 
   const submitActivity = async () => {
     try {
+      // Check authentication
+      if (!isAuthenticated || !user) {
+        Alert.alert(
+          'Authentication Required',
+          'Please login to create a pick request.',
+          [{ text: 'OK' }]
+        );
+        setStep('failed');
+        return;
+      }
+
+      // Check location
+      if (!userLocation) {
+        Alert.alert(
+          'Location Required',
+          'We need your location to create a pick request. Please enable location services.',
+          [{ text: 'OK' }]
+        );
+        setStep('failed');
+        return;
+      }
+
       const activity = customActivity.trim() || selectedActivity;
       const timeMinutes = selectedTime || parseInt(customTime.trim(), 10);
 
@@ -67,21 +145,33 @@ export default function AddActivityScreen() {
         return;
       }
 
-      // TODO: Replace with actual API call
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      // Simulate success/failure (90% success rate for demo)
-      const success = Math.random() > 0.1;
-
-      if (success) {
-        console.log('Activity saved:', { activity, timeMinutes });
-        setStep('success');
-      } else {
+      if (!activity) {
         setStep('failed');
+        return;
       }
-    } catch (error) {
+
+      // Map activity to backend enum format
+      const activityType = ACTIVITY_TYPE_MAP[activity] || 'OTHER';
+      const subject = activity; // Use activity name as subject
+
+      // Call the API
+      await createPickRequest({
+        activityType,
+        subject,
+        durationMinutes: timeMinutes,
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+      });
+
+      console.log('Pick request created:', { activity, timeMinutes, activityType });
+      setStep('success');
+    } catch (error: any) {
       console.error('Submit error:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to create pick request. Please try again.',
+        [{ text: 'OK' }]
+      );
       setStep('failed');
     }
   };
@@ -276,7 +366,7 @@ export default function AddActivityScreen() {
           </View>
           <Text style={styles.resultTitle}>Success!</Text>
           <Text style={styles.resultMessage}>
-            Your activity "{activity}" has been added for {timeLabel} today!
+            Your activity &quot;{activity}&quot; has been added for {timeLabel} today!
           </Text>
 
           <View style={styles.actionButtons}>
@@ -304,7 +394,7 @@ export default function AddActivityScreen() {
           </View>
           <Text style={styles.resultTitle}>Failed</Text>
           <Text style={styles.resultMessage}>
-            Sorry, we couldn't add your activity. Please try again later.
+            Sorry, we couldn&apos;t add your activity. Please try again later.
           </Text>
 
           <View style={styles.actionButtons}>

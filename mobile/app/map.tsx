@@ -3,17 +3,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
 import { useEffect, useState } from 'react';
 import * as Location from 'expo-location';
-import { DEFAULT_MAP_SETTINGS } from '@/constants/maps';
+import { DEFAULT_MAP_SETTINGS, GOOGLE_MAPS_API_KEY } from '@/constants/maps';
 
-// Platform-specific imports - only load react-native-maps on native platforms
-// Metro/Webpack resolver will alias react-native-maps to @teovilla/react-native-web-maps on web
-let MapView: any;
-let Marker: any;
-let Circle: any;
-let PROVIDER_GOOGLE: any;
-
-// Load maps module - only called on native platforms in useEffect
-// This prevents web bundler from statically analyzing react-native-maps at module load time
+// Import react-native-maps - Metro will alias to @teovilla/react-native-web-maps on web
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const MapsModule = require('react-native-maps');
+const MapView = MapsModule.default;
+const Marker = MapsModule.Marker;
+const Circle = MapsModule.Circle;
+const PROVIDER_GOOGLE = MapsModule.PROVIDER_GOOGLE;
 
 export default function MapScreen() {
   const colors = Colors.light;
@@ -21,34 +19,6 @@ export default function MapScreen() {
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [initialLocation, setInitialLocation] = useState<Location.LocationObject | null>(null);
   const [region, setRegion] = useState(DEFAULT_MAP_SETTINGS.initialRegion);
-  const [mapsLoaded, setMapsLoaded] = useState(false);
-
-  // Load react-native-maps only on native platforms
-  // Note: This file should not be loaded on web - Expo uses map.web.tsx for web builds
-  // If this runs on web, something is wrong with file resolution
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      console.error('ERROR: map.tsx is being loaded on web! Should use map.web.tsx instead.');
-      setMapsLoaded(true); // Prevent errors
-      return;
-    }
-
-    if (!mapsLoaded) {
-      try {
-        // Dynamic require inside useEffect - only executes on native platforms
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const MapsModule = require('react-native-maps');
-        MapView = MapsModule.default;
-        Marker = MapsModule.Marker;
-        Circle = MapsModule.Circle;
-        PROVIDER_GOOGLE = MapsModule.PROVIDER_GOOGLE;
-        setMapsLoaded(true);
-      } catch (error) {
-        console.warn('Failed to load react-native-maps:', error);
-        setMapsLoaded(true); // Set to true to prevent infinite loading
-      }
-    }
-  }, [mapsLoaded]);
 
   useEffect(() => {
     // Request location permissions and get initial location
@@ -130,47 +100,6 @@ export default function MapScreen() {
     );
   }
 
-  // Web fallback - show message that maps are not fully supported on web
-  if (Platform.OS === 'web') {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.mapContainer, styles.webFallback]}>
-          <View style={styles.webFallbackContent}>
-            <View style={styles.webFallbackText}>
-              Maps are only available on iOS and Android devices.
-            </View>
-            <View style={styles.webFallbackText}>
-              Current Location: {region.latitude.toFixed(4)}, {region.longitude.toFixed(4)}
-            </View>
-          </View>
-        </View>
-        <SafeAreaView edges={['bottom']} style={styles.tabBarContainer}>
-          {/* Tab bar content can go here */}
-        </SafeAreaView>
-      </View>
-    );
-  }
-
-  // Ensure MapView is available before rendering (native platforms only)
-  if (!mapsLoaded || !MapView) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.mapContainer, styles.webFallback]}>
-          <View style={styles.webFallbackContent}>
-            <View style={styles.webFallbackText}>
-              Maps not available. Please ensure react-native-maps is properly installed.
-            </View>
-            <View style={styles.webFallbackText}>
-              Current Location: {region.latitude.toFixed(4)}, {region.longitude.toFixed(4)}
-            </View>
-          </View>
-        </View>
-        <SafeAreaView edges={['bottom']} style={styles.tabBarContainer}>
-          {/* Tab bar content can go here */}
-        </SafeAreaView>
-      </View>
-    );
-  }
 
   // Load users data
   const usersData = require('@/assets/data/users.json');
@@ -191,6 +120,7 @@ export default function MapScreen() {
         pitchEnabled={true}
         rotateEnabled={true}
         mapType="standard"
+        {...(Platform.OS === 'web' && GOOGLE_MAPS_API_KEY ? { googleMapsApiKey: GOOGLE_MAPS_API_KEY } : {})}
         customMapStyle={[
           {
             featureType: 'all',
