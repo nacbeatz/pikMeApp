@@ -72,7 +72,7 @@ public class PickRequestController
     public ResponseEntity<List<NearbyPickRequestResponse>> getNearbyPickRequests(
             @RequestParam Double latitude,
             @RequestParam Double longitude,
-            @RequestParam(defaultValue = "5000") Double radiusMeters,
+            @RequestParam(defaultValue = "50000") Double radiusMeters,
             @AuthenticationPrincipal UserDetails userDetails) {
 
         List<NearbyPickRequestResponse> nearbyRequests =
