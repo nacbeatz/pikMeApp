@@ -55,9 +55,9 @@ async function authenticatedFetch(
   options: RequestInit = {}
 ): Promise<Response> {
   const token = await getAuthToken();
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...(options.headers as Record<string, string>),
   };
 
   if (token) {
@@ -91,17 +91,17 @@ export async function getCurrentUser(): Promise<UserProfile> {
 
 /**
  * Get nearby pick requests for the map
- * GET /api/pick-requests/nearby?latitude={lat}&longitude={lng}&radiusMeters={radius}
+ * GET /api/pick-requests/nearby?latitude={lat}&longitude={lng}&radius={radius}
  */
 export async function getNearbyPickRequests(
   latitude: number,
   longitude: number,
-  radiusMeters: number = 5000
+  radius: number = 5000
 ): Promise<PickRequest[]> {
   const params = new URLSearchParams({
     latitude: latitude.toString(),
     longitude: longitude.toString(),
-    radiusMeters: radiusMeters.toString(),
+    radius: radius.toString(),
   });
 
   const response = await authenticatedFetch(`/api/pick-requests/nearby?${params}`);

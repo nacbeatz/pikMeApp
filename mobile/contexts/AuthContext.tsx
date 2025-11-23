@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      const response = await fetch(`${API_BASE}/auth/login`, {
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -95,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      const response = await fetch(`${API_BASE}/auth/register`, {
+      const response = await fetch(`${API_BASE}/api/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

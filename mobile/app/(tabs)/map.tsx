@@ -1,5 +1,6 @@
 import { StyleSheet, View, Alert, Text, Modal, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
 import { GOOGLE_MAPS_API_KEY } from '@/constants/maps';
 import { getNearbyPickRequests, sendPickRequest, type PickRequest } from '@/services/api';
@@ -119,47 +120,52 @@ export default function MapScreen() {
       : null;
   }, [initialLocation]);
 
-  // Fetch nearby pick requests from API
-  useEffect(() => {
-    const fetchPickRequests = async () => {
-      if (!userCoordinates) {
-        return;
-      }
+  // Function to fetch nearby pick requests (extracted for reuse)
+  const fetchPickRequests = useCallback(async () => {
+    if (!userCoordinates) {
+      return;
+    }
 
-      // If not authenticated, show dummy data instead
-      if (!isAuthenticated) {
-        console.log('Not authenticated, showing dummy users data');
-        setIsLoadingPickRequests(false);
-        return;
-      }
+    // If not authenticated, show dummy data instead
+    if (!isAuthenticated) {
+      console.log('Not authenticated, showing dummy users data');
+      setIsLoadingPickRequests(false);
+      return;
+    }
 
-      setIsLoadingPickRequests(true);
-      try {
-        const requests = await getNearbyPickRequests(
-          userCoordinates.latitude,
-          userCoordinates.longitude,
-          5000 // 5km radius
-        );
-        setPickRequests(requests);
-        console.log('Fetched pick requests:', requests.length);
-      } catch (error) {
-        console.error('Error fetching pick requests:', error);
-        // On error, fall back to dummy data
-        console.log('Falling back to dummy users data');
-        setPickRequests([]);
-        // Don't show alert if falling back to dummy data
-        // Alert.alert(
-        //   'Error',
-        //   'Failed to load nearby pick requests. Showing available users instead.',
-        //   [{ text: 'OK' }]
-        // );
-      } finally {
-        setIsLoadingPickRequests(false);
-      }
-    };
-
-    fetchPickRequests();
+    setIsLoadingPickRequests(true);
+    try {
+      const requests = await getNearbyPickRequests(
+        userCoordinates.latitude,
+        userCoordinates.longitude,
+        5000 // 5km radius
+      );
+      setPickRequests(requests);
+      console.log('Fetched pick requests:', requests.length);
+    } catch (error) {
+      console.error('Error fetching pick requests:', error);
+      // On error, fall back to dummy data
+      console.log('Falling back to dummy users data');
+      setPickRequests([]);
+    } finally {
+      setIsLoadingPickRequests(false);
+    }
   }, [isAuthenticated, userCoordinates]);
+
+  // Fetch nearby pick requests when component mounts or when dependencies change
+  useEffect(() => {
+    fetchPickRequests();
+  }, [fetchPickRequests]);
+
+  // Refresh nearby pick requests when screen is focused (e.g., after creating a pick request)
+  useFocusEffect(
+    useCallback(() => {
+      if (userCoordinates && isAuthenticated) {
+        console.log('Map screen focused, refreshing nearby pick requests...');
+        fetchPickRequests();
+      }
+    }, [fetchPickRequests, userCoordinates, isAuthenticated])
+  );
   
   const handleMarkerPress = (pickRequest: PickRequest) => {
     setSelectedPickRequest(pickRequest);

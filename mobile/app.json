@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "extra": {
-      "API_BASE_URL": "http://10.30.64.180:8080/api/"  // backend IP
+      "API_BASE_URL": "http://10.30.65.33:8080"  // backend IP
     },
     "ios": {
       "supportsTablet": true,
