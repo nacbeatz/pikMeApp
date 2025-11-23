@@ -1,10 +1,5 @@
-<<<<<<< HEAD
-import { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Image } from 'react-native';
-=======
 import { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Alert } from 'react-native';
->>>>>>> 16c2ec966b9cd38252e4b3a520c5fdce037a80c6
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Image, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { MaterialIcons } from '@expo/vector-icons';
