@@ -1,8 +1,11 @@
 import { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { MaterialIcons } from '@expo/vector-icons';
+
+const timeLogo = require('@/assets/images/clock.png')
+const activityLogo = require('@/assets/images/activityLogo.png')
 
 const ACTIVITIES = [
   'Coffee',
@@ -111,6 +114,9 @@ export default function AddActivityScreen() {
         </View>
 
         <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
+          <Image 
+            source={activityLogo}
+            style={styles.activityImage}/>
           <Text style={styles.title}>Step 1 of 2</Text>
           <Text style={styles.subtitle}>What would you like to do today?</Text>
 
@@ -181,6 +187,9 @@ export default function AddActivityScreen() {
         </View>
 
         <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
+          <Image 
+            source={timeLogo}
+            style={styles.images}/>
           <Text style={styles.title}>Step 2 of 2</Text>
           <Text style={styles.subtitle}>How long? (Today)</Text>
 
@@ -583,5 +592,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
+  },
+  images: {
+    width: 100,
+    height: 100,
+    alignSelf: 'center',
+  },
+  activityImage: {
+    width: 300,
+    height: 100,
+    alignSelf: 'center',
   },
 });
