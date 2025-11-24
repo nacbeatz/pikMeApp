@@ -114,17 +114,22 @@ public class PickRequestService {
             String currentUserEmail)
     {
 
-        User currentUser = userRepository.findByEmail(currentUserEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+//        User currentUser = userRepository.findByEmail(currentUserEmail)
+//                .orElseThrow(() -> new RuntimeException("User not found"));
+        User currentUser = null;
+        if (currentUserEmail != null)
+            currentUser = userRepository.findByEmail(currentUserEmail).orElse(null);
 
         List<PickRequest> nearbyRequests = pickRequestRepository.findNearbyPickRequests(
                 latitude, longitude, radiusMeters
         );
 
         DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+        final User finalCurrentUser = currentUser;
 
         return nearbyRequests.stream()
-                .filter(pr -> !pr.getUser().getId().equals(currentUser.getId())) // Exclude own requests
+                .filter(pr -> /*finalCurrentUser == null ||*/ !pr.getUser().getId().equals(finalCurrentUser.getId()))
+//                .filter(pr -> !pr.getUser().getId().equals(currentUser.getId())) // Exclude own requests
                 .filter(pr -> pr.getStatus() == PickStatus.ACTIVE) // Only active
                 .map(pr -> {
                     User requester = pr.getUser();

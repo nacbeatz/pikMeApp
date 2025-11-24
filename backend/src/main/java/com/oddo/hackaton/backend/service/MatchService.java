@@ -1,7 +1,5 @@
 package com.oddo.hackaton.backend.service;
 
-import com.oddo.hackaton.backend.exceptions.PickRequestException;
-import com.oddo.hackaton.backend.exceptions.UserException;
 import com.oddo.hackaton.backend.model.dto.reponse.MatchResponse;
 import com.oddo.hackaton.backend.model.entity.Match;
 import com.oddo.hackaton.backend.model.entity.PickRequest;

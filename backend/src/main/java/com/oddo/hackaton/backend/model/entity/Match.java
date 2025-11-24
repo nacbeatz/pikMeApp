@@ -1,7 +1,6 @@
 package com.oddo.hackaton.backend.model.entity;
 
 import com.oddo.hackaton.backend.model.enums.MatchStatus;
-import com.oddo.hackaton.backend.model.enums.PickStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;

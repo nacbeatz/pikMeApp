@@ -3,7 +3,6 @@ package com.oddo.hackaton.backend.controller;
 import com.oddo.hackaton.backend.model.dto.reponse.NearbyPickRequestResponse;
 import com.oddo.hackaton.backend.model.dto.reponse.PickRequestResponse;
 import com.oddo.hackaton.backend.model.dto.request.CreatePickRequestRequest;
-import com.oddo.hackaton.backend.model.entity.PickRequest;
 import com.oddo.hackaton.backend.service.PickRequestService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -72,15 +71,14 @@ public class PickRequestController
     public ResponseEntity<List<NearbyPickRequestResponse>> getNearbyPickRequests(
             @RequestParam Double latitude,
             @RequestParam Double longitude,
-<<<<<<< HEAD
-            @RequestParam(defaultValue = "50000") Double radius,
-=======
             @RequestParam(defaultValue = "50000") Double radiusMeters,
->>>>>>> 16c2ec966b9cd38252e4b3a520c5fdce037a80c6
             @AuthenticationPrincipal UserDetails userDetails) {
+        String currentUserEmail = null;
+        if (userDetails != null)
+            currentUserEmail = userDetails.getUsername();
 
         List<NearbyPickRequestResponse> nearbyRequests =
-                pickRequestService.findNearbyPickRequests(latitude, longitude, radius, userDetails.getUsername());
+                pickRequestService.findNearbyPickRequests(latitude, longitude, radiusMeters, currentUserEmail);
 
         return ResponseEntity.ok(nearbyRequests);
     }
